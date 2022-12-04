@@ -21,9 +21,15 @@ impl Range {
         }
     }
 
-    fn overlap(self, other: Range) -> bool {
-        self.left <= other.left && self.right >= other.right ||
-            self.left >= other.left && self.right <= other.right
+    fn contains(&self, range: &Range) -> bool {
+        self.left <= range.left && self.right >= range.right
+    }
+
+    fn overlaps(&self, range: &Range) -> bool {
+        // Overlap on the right side of `self`
+        (self.right >= range.left && self.left <= range.right)
+        // Overlap on the left side of `self`
+        || (self.left <= range.right && self.right >= range.left)
     }
 }
 
@@ -37,8 +43,8 @@ fn part_one() {
         let (left_range, right_range) = split_in_two(&pair, ",");
         let left = Range::from_string(left_range);
         let right = Range::from_string(right_range);
-        right.overlap(left)
-    }).filter(|overlap| *overlap).count();
+        right.contains(&left) || left.contains(&right)
+    }).filter(|contains| *contains).count();
 
     println!("Part 1: {:?}", overlaps);
 }
@@ -47,6 +53,17 @@ fn part_two() {
     let file_path = "data.txt";
     let file = File::open(file_path).expect("File not found");
     let pairs = io::BufReader::new(file).lines();
+
+    let overlaps = pairs.map(|pair| {
+        let pair = pair.unwrap();
+        let (left_range, right_range) = split_in_two(&pair, ",");
+        let left = Range::from_string(left_range);
+        let right = Range::from_string(right_range);
+        println!("right: {:?}", right.overlaps(&left));
+        right.overlaps(&left)
+    }).filter(|overlap| *overlap).count();
+
+    println!("Part 2: {:?}", overlaps);
 }
 
 fn main() {
