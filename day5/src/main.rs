@@ -1,17 +1,22 @@
-use std::{fs, collections::HashMap};
+use std::{fs, collections::HashMap, fmt::{Debug, Display}};
 
-#[derive(Debug)]
-struct ParseError;
-
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 struct Crate(char);
 
-fn get_stack_nr(index: usize) -> usize {
-    if index <= 1 {
-        return 1;
-    } else {
-        return (index - 1) / 3 + 1;
+impl Debug for Crate {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        f.write_str(self.0.to_string().as_ref())
     }
+}
+
+impl Display for Crate {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        f.write_str(self.0.to_string().as_ref())
+    }
+}
+
+fn get_stack_nr(index: usize) -> usize {
+    return index / 4 + 1;
 }
 
 #[derive(Debug)]
@@ -28,33 +33,60 @@ impl CrateStacks {
         if let Some(stack) = self.crate_stacks.get_mut(&stack_nr) {
             stack.push(crt);
         } else {
-            // TODO: if None, create stack
             self.crate_stacks.insert(stack_nr, vec![crt]);
         }
     }
 
-    fn move_crate(&self, crt: Crate, from_stack: usize, to_stack: usize) {
-        unimplemented!();
+    fn move_crate(&mut self, from_stack: usize, to_stack: usize) {
+        let stack = self.crate_stacks.get_mut(&from_stack).unwrap();
+        let crt = stack.pop().unwrap();
+        self.place_crate(crt, to_stack);
+    }
+
+    fn move_from_string(&mut self, string: &str) {
+        let action: Vec<&str> = string.split(' ').collect();
+        let [times, from, to] = [action[1], action[3], action[5]].map(|a| a.parse::<usize>().unwrap());
+        for _ in 0..times {
+            self.move_crate(from, to);
+        }
+    }
+
+    fn get_top_crates(&self) -> Vec<&Crate> {
+        self.crate_stacks.iter().map(|(_, stack)| {
+            stack.last().unwrap()
+        }).collect()
     }
 }
 
 fn part_one() {
     let file_path = "data.txt";
     let data = fs::read_to_string(file_path).expect("File not found");
-    let (crates, _moves) = data.split_once("\n\n").unwrap();
+    let (crates, moves) = data.split_once("\n\n").unwrap();
 
     let mut crate_stacks = CrateStacks::new();
 
+    // Initial crate stack configurations
     for line in crates.lines().rev().skip(1) {
         for (i, window) in line.chars().collect::<Vec<char>>().windows(3).enumerate() {
-            if let ('[', ']') = (window[0], window[2]) {
-                let crt = Crate(window[1]);
-                crate_stacks.place_crate(crt, get_stack_nr(i));
+            if let ('[', crt, ']') = (window[0], window[1], window[2]) {
+                crate_stacks.place_crate(Crate(crt), get_stack_nr(i));
             }
         }
     }
 
-    println!("crate_stacks: {:?}", crate_stacks);
+    // Moves
+    for action in moves.lines() {
+        crate_stacks.move_from_string(action);
+    }
+
+    let result: String = crate_stacks
+        .get_top_crates()
+        .iter()
+        .map(|c| c.to_string())
+        .collect::<Vec<String>>()
+        .join("");
+
+    println!("Part 1: {:?}", result);
 }
 
 fn main() {
