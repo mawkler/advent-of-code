@@ -1,4 +1,4 @@
-use std::{fs, collections::HashMap, fmt::{Debug, Display}};
+use std::{fs, fmt::{Debug, Display}};
 
 #[derive(Clone, Copy)]
 struct Crate(char);
@@ -21,24 +21,24 @@ fn get_stack_nr(index: usize) -> usize {
 
 #[derive(Debug)]
 struct CrateStacks {
-    crate_stacks: HashMap<usize, Vec<Crate>>
+    crate_stacks: Vec<Vec<Crate>>
 }
 
 impl CrateStacks {
     fn new() -> Self {
-        CrateStacks { crate_stacks: HashMap::new() }
+        CrateStacks { crate_stacks: vec!(vec!()) }
     }
 
     fn place_crate(&mut self, crt: Crate, stack_nr: usize) {
-        if let Some(stack) = self.crate_stacks.get_mut(&stack_nr) {
+        if let Some(stack) = self.crate_stacks.get_mut(stack_nr - 1) {
             stack.push(crt);
         } else {
-            self.crate_stacks.insert(stack_nr, vec![crt]);
+            self.crate_stacks.push(vec![crt]);
         }
     }
 
     fn move_crate(&mut self, from_stack: usize, to_stack: usize) {
-        let stack = self.crate_stacks.get_mut(&from_stack).unwrap();
+        let stack = self.crate_stacks.get_mut(from_stack - 1).unwrap();
         let crt = stack.pop().unwrap();
         self.place_crate(crt, to_stack);
     }
@@ -52,7 +52,7 @@ impl CrateStacks {
     }
 
     fn get_top_crates(&self) -> Vec<&Crate> {
-        self.crate_stacks.iter().map(|(_, stack)| {
+        self.crate_stacks.iter().map(|stack| {
             stack.last().unwrap()
         }).collect()
     }
@@ -65,7 +65,7 @@ fn part_one() {
 
     let mut crate_stacks = CrateStacks::new();
 
-    // Initial crate stack configurations
+    // Initialize crate stack configurations
     for line in crates.lines().rev().skip(1) {
         for (i, window) in line.chars().collect::<Vec<char>>().windows(3).enumerate() {
             if let ('[', crt, ']') = (window[0], window[1], window[2]) {
@@ -74,11 +74,12 @@ fn part_one() {
         }
     }
 
-    // Moves
+    // Perform moves
     for action in moves.lines() {
         crate_stacks.move_from_string(action);
     }
 
+    // Get top crates
     let result: String = crate_stacks
         .get_top_crates()
         .iter()
