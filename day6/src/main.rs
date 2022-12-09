@@ -6,26 +6,39 @@ fn has_duplicate(signal: &Vec<char>) -> bool {
     signal.windows(2).any(|pair| pair[0] == pair[1])
 }
 
-fn part_one() {
-    let  file_path = "data.txt";
-    let signal = fs::read_to_string(file_path).expect("File not found");
-
-    let marker_pos = signal
+fn get_first_n_uniques_end_pos(signal: &String, n: usize) -> usize {
+    signal
         .chars()
         .collect::<Vec<char>>()
-        .windows(4)
+        .windows(n)
         .enumerate()
         .find_map(|(i, window)| {
             if !has_duplicate(&window.to_vec()) {
-                println!("window: {:?}", window);
                 Some(i + window.len())
-            } else { None }
+            } else {
+                None
+            }
         })
-        .unwrap();
+        .unwrap()
+}
 
+fn part_one() {
+    let file_path = "data.txt";
+    let signal = fs::read_to_string(file_path).expect("File not found");
+
+    let marker_pos = get_first_n_uniques_end_pos(&signal, 4);
     println!("Part 1: {:?}", marker_pos);
 }
 
+fn part_two() {
+    let file_path = "data.txt";
+    let signal = fs::read_to_string(file_path).expect("File not found");
+
+    let marker_pos = get_first_n_uniques_end_pos(&signal, 14);
+    println!("Part 2: {:?}", marker_pos);
+}
+
 fn main() {
-    part_one()
+    part_one();
+    part_two();
 }
