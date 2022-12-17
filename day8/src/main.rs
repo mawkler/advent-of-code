@@ -1,48 +1,46 @@
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
-fn count_visible_trees_from_left(treeline: &Vec<char>) -> u32 {
-    let treeline = treeline.iter().map(|tree| tree.to_digit(10));
+struct Coordinate { y: usize, x: usize, }
 
-    let (_, total) = treeline.fold((-1 as i32, 0), |(tallest_height, visible_count), tree| {
-        if tree.unwrap() as i32 > tallest_height {
-            return (tree.unwrap() as i32, visible_count + 1);
-        }
-        else {
-            return (tallest_height, visible_count);
-        }
-    });
+type Tree = u32;
+type Forest = Vec<Vec<Tree>>;
 
-    return total as u32;
+fn is_tallest(height: u32, treeline: Vec<Tree>) -> bool {
+    treeline.iter().all(|tree| tree < &height )
 }
 
-fn count_visible_trees(treeline: &Vec<char>) -> u32 {
-    let left_to_right = count_visible_trees_from_left(treeline);
-    let reversed_treeline: Vec<char> = treeline
+/// Splits `treeline` at tree at `position`, and excludes the tree at the split
+/// `position`
+fn split_treeline(treeline: &Vec<Tree>, position: usize) -> (Vec<Tree>, Vec<Tree>) {
+    let (left, right_with_tree) = treeline.split_at(position);
+    let (_, right) = right_with_tree.split_first().unwrap();
+    return (left.to_vec(), right.to_vec());
+}
+
+fn is_horizontally_visible(tree: &Coordinate, forest: &Forest) -> bool {
+    let (left, right) = split_treeline(&forest[tree.y], tree.x);
+    let height = forest[tree.y][tree.x];
+
+    return is_tallest(height, right.to_vec())
+        || is_tallest(height, left.to_vec());
+}
+
+fn is_vertically_visible(tree: &Coordinate, forest: &Forest) -> bool {
+    let treeline: Vec<u32> = forest
         .iter()
-        .rev()
-        .collect::<String>()
-        .chars()
+        .map(|treeline| treeline[tree.x])
         .collect();
-    let right_to_left = count_visible_trees_from_left(&reversed_treeline);
-    println!("left_to_right: {:?}", left_to_right);
-    println!("right_to_left: {:?}", right_to_left);
-    return left_to_right + right_to_left;
+    let (top, bottom) = split_treeline(&treeline, tree.y);
+    let height = forest[tree.y][tree.x];
+
+    return is_tallest(height, top.to_vec())
+        || is_tallest(height, bottom.to_vec());
 }
 
-// Borrowed from: https://users.rust-lang.org/t/rayon-transpose-of-vec-vec-t/62864
-fn transpose<T>(v: Vec<Vec<T>>) -> Vec<Vec<T>> {
-    assert!(!v.is_empty());
-    let len = v[0].len();
-    let mut iters: Vec<_> = v.into_iter().map(|n| n.into_iter()).collect();
-    (0..len)
-        .map(|_| {
-            iters
-                .iter_mut()
-                .map(|n| n.next().unwrap())
-                .collect::<Vec<T>>()
-        })
-        .collect()
+fn is_visible(tree: &Coordinate, forest: &Forest) -> bool {
+    return is_horizontally_visible(&tree, forest)
+        || is_vertically_visible(&tree, forest)
 }
 
 fn part_one() {
@@ -50,19 +48,27 @@ fn part_one() {
     let file = File::open(file_path).expect("File not found");
     let forest = BufReader::new(file).lines();
 
-    let forest: Vec<Vec<char>> = forest
-        .map(|treeline| treeline.unwrap().chars().collect())
+    let forest: Forest = forest
+        .map(|treeline| treeline
+            .unwrap()
+            .chars()
+            .map(|tree| tree.to_digit(10).unwrap())
+            .collect()
+        )
         .collect();
 
-    let horizontal_count: u32 = forest.iter().map(count_visible_trees).sum();
-    println!("horizontal_count: {:?}", horizontal_count);
-    let vertical_count: u32 = transpose(forest)
-        .iter()
-        .map(count_visible_trees)
-        .sum();
-    println!("vertical_count: {:?}", vertical_count);
+    let visible_trees: Vec<bool> = forest.to_owned().iter().enumerate().flat_map(|(y, treeline)| {
+        treeline.iter().enumerate().map(|(x, _)| {
+            is_visible(&Coordinate {x, y}, forest.as_ref())
+        }).collect::<Vec<bool>>()
+    }).collect();
 
-    println!("Part 1: {:?}", horizontal_count + vertical_count);
+    let sum = visible_trees
+        .into_iter()
+        .filter(|tree| *tree)
+        .into_iter().count();
+
+    println!("sum: {:?}", sum);
 }
 
 fn main() {
