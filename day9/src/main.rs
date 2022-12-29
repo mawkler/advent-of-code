@@ -2,6 +2,7 @@
 
 use self::Dimension::{Horizontal, Vertical};
 use self::Direction::{Down, Left, Right, Up};
+use std::fmt;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::ops::Deref;
@@ -10,6 +11,18 @@ use std::ops::Deref;
 struct Coordinate {
     x: usize,
     y: usize,
+}
+
+impl PartialEq<Coordinate> for Coordinate {
+    fn eq(&self, other: &Self) -> bool {
+        self.x == other.x && self.y == other.y
+    }
+}
+
+impl PartialEq<(usize, usize)> for Coordinate {
+    fn eq(&self, (x, y): &(usize, usize)) -> bool {
+        self.x == *x && self.y == *y
+    }
 }
 
 #[derive(Debug)]
@@ -174,12 +187,38 @@ impl Simulation {
     fn move_roap(&mut self, direction: &Direction) {
         self.move_roap_head(&direction);
         let tail_adjustment = self.tail_adjustment(&direction);
-        println!("tail_adjustment: {:?}", tail_adjustment);
         for adjustment in tail_adjustment {
             self.move_roap_tail(&adjustment);
         }
 
         self.matrix.set(&self.roap.tail, true);
+    }
+}
+
+impl fmt::Display for Simulation {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut matrix = &self
+            .matrix
+            .0
+            .iter()
+            .enumerate()
+            .map(|(y, row)| {
+                row.iter()
+                    .enumerate()
+                    .map(|(x, v)| match (x, y) {
+                        _ if self.roap.head == (x, y) => "H",
+                        _ if self.roap.tail == (x, y) => "T",
+                        _ => ".",
+                    })
+                    .collect::<Vec<&str>>()
+                    .join(" ")
+            })
+            .rev()
+            .collect::<Vec<String>>()
+            .join("\n");
+        let mut matrix_with_newline = "\n".to_string();
+        matrix_with_newline.push_str(matrix);
+        write!(f, "{}", matrix_with_newline)
     }
 }
 
@@ -194,11 +233,11 @@ fn main() {
 
     let mut s = Simulation::new();
     let c = Coordinate { x: 0, y: 0 };
-    println!("s: {:#?}", s);
+    println!("{}", s);
     s.move_roap(&Up);
-    println!("s: {:#?}", s);
+    println!("{}", s);
     s.move_roap(&Right);
-    println!("s: {:#?}", s);
+    println!("{}", s);
     s.move_roap(&Right);
-    println!("s: {:#?}", s);
+    println!("{}", s);
 }
