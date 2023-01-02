@@ -1,7 +1,8 @@
-#![allow(unused)]
+#![allow(unused)] // TODO: remove this
 
 use self::Dimension::{Horizontal, Vertical};
 use self::Direction::{Down, Left, Right, Up};
+use core::cmp::Ordering;
 use std::fmt;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -49,16 +50,38 @@ impl Matrix {
         (0..size).map(|_| false).collect()
     }
 
+    fn size(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Prepends `prepend_vec` to `vec`
+    fn prepend<T>(vec: &mut Vec<T>, prepend_vec: Vec<T>) {
+        vec.splice(0..0, prepend_vec);
+    }
+
+    fn needs_expanding(&self, coordinate: &Coordinate, move_direction: &Direction) -> bool {
+        let max = self.size() - 1;
+        match move_direction {
+            Up => coordinate.y >= max,
+            Down => coordinate.y <= max,
+            Left => coordinate.x <= max,
+            Right => coordinate.x >= max,
+        }
+    }
+
     /// Doubles the size of the matrix
     fn expand(&mut self) {
-        let size = self.0.len();
+        let margin = self.size() / 2; // In case size is odd
+        let new_size = self.size() + margin * 2;
 
         for row in &mut self.0 {
-            row.append(&mut Self::new_empty_vector(size));
+            Self::prepend(row, Self::new_empty_vector(margin));
+            row.append(&mut Self::new_empty_vector(margin));
         }
 
-        for _ in 0..size {
-            self.0.push(Self::new_empty_vector(size * 2))
+        for _ in 0..margin {
+            self.0.insert(0, Self::new_empty_vector(new_size));
+            self.0.push(Self::new_empty_vector(new_size));
         }
     }
 }
@@ -185,6 +208,10 @@ impl Simulation {
     }
 
     fn move_roap(&mut self, direction: &Direction) {
+        if self.matrix.needs_expanding(&self.roap.head, direction) {
+            self.expand();
+        }
+
         self.move_roap_head(&direction);
         let tail_adjustment = self.tail_adjustment(&direction);
         for adjustment in tail_adjustment {
@@ -192,6 +219,17 @@ impl Simulation {
         }
 
         self.matrix.set(&self.roap.tail, true);
+    }
+
+    fn expand(&mut self) {
+        let matrix_size_pre = self.matrix.size();
+        self.matrix.expand();
+        let matrix_size_post = self.matrix.size();
+        let offset = (matrix_size_post - matrix_size_pre) / 2;
+        self.roap.head.x += offset;
+        self.roap.head.y += offset;
+        self.roap.tail.x += offset;
+        self.roap.tail.y += offset;
     }
 }
 
@@ -208,6 +246,7 @@ impl fmt::Display for Simulation {
                     .map(|(x, v)| match (x, y) {
                         _ if self.roap.head == (x, y) => "H",
                         _ if self.roap.tail == (x, y) => "T",
+                        _ if *v => "#",
                         _ => ".",
                     })
                     .collect::<Vec<&str>>()
@@ -239,5 +278,9 @@ fn main() {
     s.move_roap(&Right);
     println!("{}", s);
     s.move_roap(&Right);
+    println!("{}", s);
+    s.expand();
+    println!("{}", s);
+    s.expand();
     println!("{}", s);
 }
