@@ -1,12 +1,8 @@
-#![allow(unused)] // TODO: remove this
-
 use self::Dimension::{Horizontal, Vertical};
 use self::Direction::{Down, Left, Right, Up};
-use core::cmp::Ordering;
 use std::fmt;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
-use std::ops::Deref;
 
 #[derive(Debug, Clone, Copy)]
 struct Coordinate {
@@ -38,10 +34,6 @@ impl Matrix {
         ])
     }
 
-    fn get(&self, coordinate: &Coordinate) -> &bool {
-        &self.0[coordinate.y][coordinate.x]
-    }
-
     fn set(&mut self, coordinate: &Coordinate, value: bool) {
         self.0[coordinate.y][coordinate.x] = value;
     }
@@ -63,8 +55,8 @@ impl Matrix {
         let max = self.size() - 1;
         match move_direction {
             Up => coordinate.y >= max,
-            Down => coordinate.y <= max,
-            Left => coordinate.x <= max,
+            Down => coordinate.y <= 0,
+            Left => coordinate.x <= 0,
             Right => coordinate.x >= max,
         }
     }
@@ -84,6 +76,18 @@ impl Matrix {
             self.0.push(Self::new_empty_vector(new_size));
         }
     }
+
+    fn add_coordinate_margin(coordinate: &mut Coordinate, margin: usize) {
+        coordinate.x += margin;
+        coordinate.y += margin;
+    }
+
+    fn count_visited_coordinates(&self) -> usize {
+        self.0
+            .iter()
+            .map(|row| row.iter().filter(|visited| **visited).count())
+            .sum()
+    }
 }
 
 #[derive(Debug)]
@@ -96,7 +100,13 @@ enum Direction {
 
 impl Direction {
     fn from_str(string: &str) -> Self {
-        todo!()
+        match string {
+            "U" => Up,
+            "D" => Down,
+            "L" => Left,
+            "R" => Right,
+            _ => panic!("Direction not recognized"),
+        }
     }
 }
 
@@ -121,7 +131,6 @@ struct Roap {
     tail: Coordinate,
 }
 
-#[derive(Debug)]
 struct Simulation {
     matrix: Matrix,
     roap: Roap,
@@ -159,21 +168,16 @@ impl Simulation {
         };
     }
 
-    // TODO: use count in move_roap_count instead
-    // fn move_roap_head_count(&mut self, direction: Direction, count: u32) {
-    //     for _ in 0..count {
-    //         self.move_roap_head(&direction)
-    //     }
-    // }
-
     fn diagonal_tail_adjustment(
         horizontal_diff: i32,
         vertical_diff: i32,
         head_move_direction: &Direction,
     ) -> Option<Direction> {
-        let move_dimension = Dimension::from_direction(head_move_direction);
+        if horizontal_diff.abs() <= 1 && vertical_diff.abs() <= 1 {
+            return None;
+        }
 
-        match move_dimension {
+        match Dimension::from_direction(head_move_direction) {
             Vertical if horizontal_diff > 0 => Some(Right),
             Vertical if horizontal_diff < 0 => Some(Left),
             Horizontal if vertical_diff > 0 => Some(Up),
@@ -214,28 +218,34 @@ impl Simulation {
 
         self.move_roap_head(&direction);
         let tail_adjustment = self.tail_adjustment(&direction);
-        for adjustment in tail_adjustment {
-            self.move_roap_tail(&adjustment);
+
+        for adjustment in &tail_adjustment {
+            self.move_roap_tail(adjustment);
         }
 
         self.matrix.set(&self.roap.tail, true);
+    }
+
+    fn move_roap_count(&mut self, direction: Direction, count: u32) {
+        for _ in 0..count {
+            self.move_roap(&direction)
+        }
     }
 
     fn expand(&mut self) {
         let matrix_size_pre = self.matrix.size();
         self.matrix.expand();
         let matrix_size_post = self.matrix.size();
-        let offset = (matrix_size_post - matrix_size_pre) / 2;
-        self.roap.head.x += offset;
-        self.roap.head.y += offset;
-        self.roap.tail.x += offset;
-        self.roap.tail.y += offset;
+
+        let margin = (matrix_size_post - matrix_size_pre) / 2;
+        Matrix::add_coordinate_margin(&mut self.roap.head, margin);
+        Matrix::add_coordinate_margin(&mut self.roap.tail, margin);
     }
 }
 
-impl fmt::Display for Simulation {
+impl fmt::Debug for Simulation {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut matrix = &self
+        let matrix = &self
             .matrix
             .0
             .iter()
@@ -264,23 +274,23 @@ impl fmt::Display for Simulation {
 fn part_one() {
     let file_path = "data.txt";
     let file = File::open(file_path).expect("File not found");
-    let motions = BufReader::new(file).lines();
+    let movements = BufReader::new(file).lines();
+
+    let mut simulation = Simulation::new();
+
+    movements.for_each(|movement| {
+        let movement = movement.unwrap();
+        let (direction, count) = movement.split_once(' ').unwrap();
+        let direction = Direction::from_str(direction);
+        let count: u32 = count.parse().unwrap();
+
+        simulation.move_roap_count(direction, count);
+    });
+
+    let count = simulation.matrix.count_visited_coordinates();
+    println!("count: {:?}", count);
 }
 
 fn main() {
     part_one();
-
-    let mut s = Simulation::new();
-    let c = Coordinate { x: 0, y: 0 };
-    println!("{}", s);
-    s.move_roap(&Up);
-    println!("{}", s);
-    s.move_roap(&Right);
-    println!("{}", s);
-    s.move_roap(&Right);
-    println!("{}", s);
-    s.expand();
-    println!("{}", s);
-    s.expand();
-    println!("{}", s);
 }
