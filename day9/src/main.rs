@@ -3,11 +3,18 @@ use self::Direction::{Down, Left, Right, Up};
 use std::fmt;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
+use std::ptr::eq;
 
 #[derive(Debug, Clone, Copy)]
 struct Coordinate {
     x: usize,
     y: usize,
+}
+
+impl Coordinate {
+    fn new() -> Coordinate {
+        Coordinate { x: 0, y: 0 }
+    }
 }
 
 impl PartialEq<Coordinate> for Coordinate {
@@ -126,9 +133,28 @@ impl Dimension {
 }
 
 #[derive(Debug)]
-struct Roap {
-    head: Coordinate,
-    tail: Coordinate,
+struct Roap(Vec<Coordinate>);
+
+impl Roap {
+    fn new(size: u32) -> Roap {
+        Roap((0..size).map(|_| Coordinate::new()).collect())
+    }
+
+    fn head(&self) -> &Coordinate {
+        self.0.first().unwrap()
+    }
+
+    fn head_mut(&mut self) -> &mut Coordinate {
+        self.0.first_mut().unwrap()
+    }
+
+    fn tail(&self) -> &Coordinate {
+        self.0.last().unwrap()
+    }
+
+    fn tail_mut(&mut self) -> &mut Coordinate {
+        self.0.last_mut().unwrap()
+    }
 }
 
 struct Simulation {
@@ -137,34 +163,31 @@ struct Simulation {
 }
 
 impl Simulation {
-    fn new() -> Self {
+    fn new(roap_size: u32) -> Self {
         let origo = Coordinate { x: 0, y: 0 };
         Simulation {
             matrix: Matrix::new(),
-            roap: Roap {
-                head: origo,
-                tail: origo,
-            },
+            roap: Roap::new(roap_size),
         }
     }
 
     fn move_roap_head(&mut self, direction: &Direction) {
-        let head = &self.roap.head;
+        let head = self.roap.head();
         match direction {
-            Up => self.roap.head.y = head.y + 1,
-            Down => self.roap.head.y = head.y - 1,
-            Left => self.roap.head.x = head.x - 1,
-            Right => self.roap.head.x = head.x + 1,
+            Up => self.roap.head_mut().y = head.y + 1,
+            Down => self.roap.head_mut().y = head.y - 1,
+            Left => self.roap.head_mut().x = head.x - 1,
+            Right => self.roap.head_mut().x = head.x + 1,
         };
     }
 
     fn move_roap_tail(&mut self, direction: &Direction) {
-        let tail = &self.roap.tail;
+        let tail = &self.roap.tail();
         match direction {
-            Up => self.roap.tail.y = tail.y + 1,
-            Down => self.roap.tail.y = tail.y - 1,
-            Left => self.roap.tail.x = tail.x - 1,
-            Right => self.roap.tail.x = tail.x + 1,
+            Up => self.roap.tail_mut().y = tail.y + 1,
+            Down => self.roap.tail_mut().y = tail.y - 1,
+            Left => self.roap.tail_mut().x = tail.x - 1,
+            Right => self.roap.tail_mut().x = tail.x + 1,
         };
     }
 
@@ -187,7 +210,7 @@ impl Simulation {
     }
 
     fn tail_adjustment(&self, head_direction: &Direction) -> Vec<Direction> {
-        let (head, tail) = (self.roap.head, self.roap.tail);
+        let (head, tail) = (self.roap.head(), self.roap.tail());
         let x_diff = head.x as i32 - tail.x as i32;
         let y_diff = head.y as i32 - tail.y as i32;
 
@@ -212,7 +235,7 @@ impl Simulation {
     }
 
     fn move_roap(&mut self, direction: &Direction) {
-        if self.matrix.needs_expanding(&self.roap.head, direction) {
+        if self.matrix.needs_expanding(&self.roap.head(), direction) {
             self.expand();
         }
 
@@ -223,7 +246,7 @@ impl Simulation {
             self.move_roap_tail(adjustment);
         }
 
-        self.matrix.set(&self.roap.tail, true);
+        self.matrix.set(&self.roap.tail(), true);
     }
 
     fn move_roap_count(&mut self, direction: Direction, count: u32) {
@@ -238,8 +261,8 @@ impl Simulation {
         let matrix_size_post = self.matrix.size();
 
         let margin = (matrix_size_post - matrix_size_pre) / 2;
-        Matrix::add_coordinate_margin(&mut self.roap.head, margin);
-        Matrix::add_coordinate_margin(&mut self.roap.tail, margin);
+        Matrix::add_coordinate_margin(&mut self.roap.head_mut(), margin);
+        Matrix::add_coordinate_margin(&mut self.roap.tail_mut(), margin);
     }
 }
 
@@ -254,8 +277,8 @@ impl fmt::Debug for Simulation {
                 row.iter()
                     .enumerate()
                     .map(|(x, v)| match (x, y) {
-                        _ if self.roap.head == (x, y) => "H",
-                        _ if self.roap.tail == (x, y) => "T",
+                        _ if *self.roap.head() == (x, y) => "H",
+                        _ if *self.roap.tail() == (x, y) => "T",
                         _ if *v => "#",
                         _ => ".",
                     })
@@ -276,7 +299,7 @@ fn part_one() {
     let file = File::open(file_path).expect("File not found");
     let movements = BufReader::new(file).lines();
 
-    let mut simulation = Simulation::new();
+    let mut simulation = Simulation::new(2);
 
     movements.for_each(|movement| {
         let movement = movement.unwrap();
@@ -288,6 +311,8 @@ fn part_one() {
     });
 
     let count = simulation.matrix.count_visited_coordinates();
+
+    assert_eq!(count, 6087);
     println!("count: {:?}", count);
 }
 
