@@ -171,23 +171,12 @@ impl Simulation {
         }
     }
 
-    fn move_roap_head(&mut self, direction: &Direction) {
-        let head = self.roap.head();
+    fn move_roap_knot(knot: &mut Coordinate, direction: &Direction) {
         match direction {
-            Up => self.roap.head_mut().y = head.y + 1,
-            Down => self.roap.head_mut().y = head.y - 1,
-            Left => self.roap.head_mut().x = head.x - 1,
-            Right => self.roap.head_mut().x = head.x + 1,
-        };
-    }
-
-    fn move_roap_tail(&mut self, direction: &Direction) {
-        let tail = &self.roap.tail();
-        match direction {
-            Up => self.roap.tail_mut().y = tail.y + 1,
-            Down => self.roap.tail_mut().y = tail.y - 1,
-            Left => self.roap.tail_mut().x = tail.x - 1,
-            Right => self.roap.tail_mut().x = tail.x + 1,
+            Up => knot.y += 1,
+            Down => knot.y -= 1,
+            Left => knot.x -= 1,
+            Right => knot.x += 1,
         };
     }
 
@@ -239,11 +228,11 @@ impl Simulation {
             self.expand();
         }
 
-        self.move_roap_head(&direction);
+        Self::move_roap_knot(self.roap.head_mut(), &direction);
         let tail_adjustment = self.tail_adjustment(&direction);
 
         for adjustment in &tail_adjustment {
-            self.move_roap_tail(adjustment);
+            Self::move_roap_knot(self.roap.tail_mut(), &adjustment);
         }
 
         self.matrix.set(&self.roap.tail(), true);
