@@ -3,7 +3,6 @@ use self::Direction::{Down, Left, Right, Up};
 use std::fmt;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
-use std::ptr::eq;
 
 #[derive(Debug, Clone, Copy)]
 struct Coordinate {
@@ -164,7 +163,6 @@ struct Simulation {
 
 impl Simulation {
     fn new(roap_size: u32) -> Self {
-        let origo = Coordinate { x: 0, y: 0 };
         Simulation {
             matrix: Matrix::new(),
             roap: Roap::new(roap_size),
@@ -198,12 +196,16 @@ impl Simulation {
         }
     }
 
-    fn tail_adjustment(&self, head_direction: &Direction) -> Vec<Direction> {
-        let (head, tail) = (self.roap.head(), self.roap.tail());
-        let x_diff = head.x as i32 - tail.x as i32;
-        let y_diff = head.y as i32 - tail.y as i32;
+    fn trail_knot_adjustment(
+        &self,
+        lead: &Coordinate,
+        trail: &Coordinate,
+        lead_direction: &Direction,
+    ) -> Vec<Direction> {
+        let x_diff = lead.x as i32 - trail.x as i32;
+        let y_diff = lead.y as i32 - trail.y as i32;
 
-        let tail_movement = if x_diff > 1 {
+        let trail_movement = if x_diff > 1 {
             Some(Right)
         } else if x_diff < -1 {
             Some(Left)
@@ -215,12 +217,26 @@ impl Simulation {
             None
         };
 
-        let tail_adjustment = Self::diagonal_tail_adjustment(x_diff, y_diff, head_direction);
+        let trail_adjustment = Self::diagonal_tail_adjustment(x_diff, y_diff, lead_direction);
 
-        [tail_movement, tail_adjustment]
+        [trail_movement, trail_adjustment]
             .into_iter()
             .flatten()
             .collect::<Vec<Direction>>()
+    }
+
+    fn get_knot_pair(&self, trail_index: usize) -> (&Coordinate, &Coordinate) {
+        let (left, right) = self.roap.0.split_at(trail_index);
+        let lead = left.last().unwrap();
+        let trail = right.first().unwrap();
+        (lead, trail)
+    }
+
+    fn get_knot_pair_mut(&mut self, trail_index: usize) -> (&mut Coordinate, &mut Coordinate) {
+        let (left, right) = self.roap.0.split_at_mut(trail_index);
+        let lead = left.last_mut().unwrap();
+        let trail = right.first_mut().unwrap();
+        (lead, trail)
     }
 
     fn move_roap(&mut self, direction: &Direction) {
@@ -228,11 +244,17 @@ impl Simulation {
             self.expand();
         }
 
-        Self::move_roap_knot(self.roap.head_mut(), &direction);
-        let tail_adjustment = self.tail_adjustment(&direction);
+        for i in 1..self.roap.0.len() {
+            let (lead, _) = self.get_knot_pair_mut(i);
+            Self::move_roap_knot(lead, &direction);
 
-        for adjustment in &tail_adjustment {
-            Self::move_roap_knot(self.roap.tail_mut(), &adjustment);
+            let (lead, trail) = self.get_knot_pair(i);
+            let tail_adjustment = self.trail_knot_adjustment(lead, trail, &direction);
+
+            let (_, trail) = self.get_knot_pair_mut(i);
+            for adjustment in &tail_adjustment {
+                Self::move_roap_knot(trail, &adjustment);
+            }
         }
 
         self.matrix.set(&self.roap.tail(), true);
