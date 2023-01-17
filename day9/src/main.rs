@@ -244,10 +244,9 @@ impl Simulation {
             self.expand();
         }
 
-        for i in 1..self.roap.0.len() {
-            let (lead, _) = self.get_knot_pair_mut(i);
-            Self::move_roap_knot(lead, &direction);
+        Self::move_roap_knot(&mut self.roap.head_mut(), &direction);
 
+        for i in 1..self.roap.0.len() {
             let (lead, trail) = self.get_knot_pair(i);
             let tail_adjustment = self.trail_knot_adjustment(lead, trail, &direction);
 
@@ -262,7 +261,8 @@ impl Simulation {
 
     fn move_roap_count(&mut self, direction: Direction, count: u32) {
         for _ in 0..count {
-            self.move_roap(&direction)
+            self.move_roap(&direction);
+            println!("self: {:?}", self);
         }
     }
 
@@ -272,8 +272,23 @@ impl Simulation {
         let matrix_size_post = self.matrix.size();
 
         let margin = (matrix_size_post - matrix_size_pre) / 2;
-        Matrix::add_coordinate_margin(&mut self.roap.head_mut(), margin);
-        Matrix::add_coordinate_margin(&mut self.roap.tail_mut(), margin);
+        for knot in &mut self.roap.0 {
+            Matrix::add_coordinate_margin(knot, margin);
+        }
+    }
+
+    fn knot_string_from_coordinate(&self, coordinate: &Coordinate) -> Option<String> {
+        self.roap
+            .0
+            .iter()
+            .position(|knot| knot == coordinate)
+            .map(|position| {
+                if position == 0 {
+                    "H".to_string()
+                } else {
+                    position.to_string()
+                }
+            })
     }
 }
 
@@ -287,13 +302,16 @@ impl fmt::Debug for Simulation {
             .map(|(y, row)| {
                 row.iter()
                     .enumerate()
-                    .map(|(x, v)| match (x, y) {
-                        _ if *self.roap.head() == (x, y) => "H",
-                        _ if *self.roap.tail() == (x, y) => "T",
-                        _ if *v => "#",
-                        _ => ".",
+                    .map(|(x, v)| {
+                        if let Some(s) = self.knot_string_from_coordinate(&Coordinate { x, y }) {
+                            s
+                        } else if *v {
+                            "#".to_string()
+                        } else {
+                            ".".to_string()
+                        }
                     })
-                    .collect::<Vec<&str>>()
+                    .collect::<Vec<String>>()
                     .join(" ")
             })
             .rev()
@@ -310,7 +328,7 @@ fn part_one() {
     let file = File::open(file_path).expect("File not found");
     let movements = BufReader::new(file).lines();
 
-    let mut simulation = Simulation::new(2);
+    let mut simulation = Simulation::new(10);
 
     movements.for_each(|movement| {
         let movement = movement.unwrap();
