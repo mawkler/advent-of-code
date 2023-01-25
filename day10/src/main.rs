@@ -41,20 +41,19 @@ fn part_one() {
     let file = File::open(file_path).expect("File not found");
     let mut instructions = BufReader::new(file).lines();
 
-    let mut cycles_total = 1;
     let mut value_total = 1;
     let mut signal_strengths: Vec<i32> = vec![];
     let mut current_instruction: Option<Instruction> = None;
 
-    while cycles_total <= 220 {
+    for cycle in 1..221 {
         let instruction = if let Some(instruction) = current_instruction.take() {
             instruction
         } else {
             Instruction::from_string(&instructions.next().unwrap().unwrap())
         };
 
-        if probe(cycles_total) {
-            signal_strengths.push(value_total * cycles_total as i32);
+        if probe(cycle) {
+            signal_strengths.push(value_total * cycle as i32);
         }
 
         let output = instruction.process(value_total);
@@ -62,11 +61,10 @@ fn part_one() {
             Output::Value(value) => value_total = value,
             Output::Instruction(instruction) => current_instruction = Some(instruction),
         }
-
-        cycles_total += 1;
     }
 
     let sum: i32 = signal_strengths.iter().sum();
+    assert_eq!(sum, 12520);
     println!("Part 1: {:?}", sum);
 }
 
