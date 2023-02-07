@@ -1,5 +1,7 @@
 use self::Instruction::{Addx, Noop};
-use std::fs::File;
+use self::Pixel::{Dark, Lit, Sprite};
+use std::fmt;
+use std::fs::{write, File};
 use std::io::{BufRead, BufReader};
 
 #[derive(Debug)]
@@ -29,6 +31,49 @@ impl Instruction {
             Addx(value, cycles) => Output::Instruction(Addx(*value, cycles - 1)),
             Noop => Output::Value(value_total),
         }
+    }
+}
+
+// type Pixel = bool;
+
+#[derive(Debug)]
+enum Pixel {
+    Lit,
+    Dark,
+    Sprite,
+}
+
+impl std::string::ToString for Pixel {
+    fn to_string(&self) -> String {
+        match self {
+            Lit => "#".to_string(),
+            Dark => ".".to_string(),
+            Sprite => "_".to_string(),
+        }
+    }
+}
+
+#[derive(Default)]
+struct Screen(Vec<Pixel>);
+
+impl Screen {
+    fn new() -> Screen {
+        let mut screen = Screen((0..240).map(|_| Dark).collect());
+        screen.0.splice(0..3, vec![Sprite, Sprite, Sprite]);
+        screen
+    }
+}
+
+impl fmt::Debug for Screen {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let strings: Vec<String> = self
+            .0
+            .iter()
+            .enumerate()
+            .map(|(i, pixel)| pixel.to_string())
+            .collect();
+
+        todo!()
     }
 }
 
@@ -70,4 +115,9 @@ fn part_one() {
 
 fn main() {
     part_one();
+    let screen = Screen::new();
+    println!("screen: {:?}", screen);
+    // let mut my_vec = vec![1, 2, 3, 4, 5];
+    // my_vec.splice(0..3, vec![10, 20, 30]);
+    // println!("my_vec: {:?}", my_vec);
 }
