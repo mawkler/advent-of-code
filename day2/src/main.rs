@@ -1,7 +1,7 @@
+use self::Action::{Paper, Rock, Scissors};
+use self::Outcome::{Draw, Loss, Win};
 use std::fs::File;
 use std::io::{self, BufRead};
-use self::Outcome::{Win, Loss, Draw};
-use self::Action::{Rock, Paper, Scissors};
 
 enum Action {
     Rock,
@@ -15,7 +15,7 @@ enum Outcome {
     Draw,
 }
 
-fn game_win(opponent: &Action, me: &Action) -> Outcome {
+fn simulate_game(opponent: &Action, me: &Action) -> Outcome {
     match (opponent, me) {
         (Rock, Paper) => Win,
         (Rock, Scissors) => Loss,
@@ -23,7 +23,7 @@ fn game_win(opponent: &Action, me: &Action) -> Outcome {
         (Paper, Scissors) => Win,
         (Scissors, Rock) => Win,
         (Scissors, Paper) => Loss,
-        (_, _) => Draw
+        (_, _) => Draw,
     }
 }
 
@@ -49,7 +49,7 @@ fn points_from_action(action: Action) -> u32 {
     match action {
         Rock => 1,
         Paper => 2,
-        Scissors => 3
+        Scissors => 3,
     }
 }
 
@@ -78,16 +78,18 @@ fn part_one() {
     let file = File::open(file_path).expect("File not found");
     let strategy = io::BufReader::new(file).lines();
 
-    let score: u32 = strategy.map(|game|{
-        let strategy_string = game.unwrap().to_ascii_lowercase();
-        let (opponent_action, my_action) = (
-            action_from_letter(strategy_string.chars().nth(0).unwrap()),
-            action_from_letter(strategy_string.chars().nth(2).unwrap())
-        );
-        let outcome = game_win(&opponent_action, &my_action);
-        points_from_action(my_action) + points_from_outcome(&outcome)
-    }).sum();
+    let score: u32 = strategy
+        .map(|game| {
+            let strategy_string = game.unwrap().to_ascii_lowercase();
+            let opponent_action = action_from_letter(strategy_string.chars().nth(0).unwrap());
+            let my_action = action_from_letter(strategy_string.chars().nth(2).unwrap());
+            let outcome = simulate_game(&opponent_action, &my_action);
 
+            points_from_action(my_action) + points_from_outcome(&outcome)
+        })
+        .sum();
+
+    assert_eq!(score, 10624);
     println!("Part 1: {:?}", score);
 }
 
@@ -96,15 +98,18 @@ fn part_two() {
     let file = File::open(file_path).expect("File not found");
     let strategy = io::BufReader::new(file).lines();
 
-    let score: u32 = strategy.map(|game|{
-        let strategy_string = game.unwrap().to_ascii_lowercase();
-        let opponent_action = action_from_letter(strategy_string.chars().nth(0).unwrap());
-        let outcome = outcome_from_letter(strategy_string.chars().nth(2).unwrap());
-        let action = action_from_outcome(opponent_action, &outcome);
+    let score: u32 = strategy
+        .map(|game| {
+            let strategy_string = game.unwrap().to_ascii_lowercase();
+            let opponent_action = action_from_letter(strategy_string.chars().nth(0).unwrap());
+            let outcome = outcome_from_letter(strategy_string.chars().nth(2).unwrap());
+            let action = action_from_outcome(opponent_action, &outcome);
 
-        points_from_action(action) + points_from_outcome(&outcome)
-    }).sum();
+            points_from_action(action) + points_from_outcome(&outcome)
+        })
+        .sum();
 
+    assert_eq!(score, 14060);
     println!("Part 2: {:?}", score);
 }
 
