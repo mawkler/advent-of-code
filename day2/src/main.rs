@@ -27,20 +27,20 @@ fn simulate_game(opponent: &Action, me: &Action) -> Outcome {
     }
 }
 
-fn action_from_letter(letter: char) -> Action {
-    match letter.to_ascii_lowercase() {
-        'a' | 'x' => Rock,
-        'b' | 'y' => Paper,
-        'c' | 'z' => Scissors,
+fn action_from_string(string: &str) -> Action {
+    match string.to_ascii_lowercase().as_ref() {
+        "a" | "x" => Rock,
+        "b" | "y" => Paper,
+        "c" | "z" => Scissors,
         other => panic!("Got unexpected character: {}", other),
     }
 }
 
-fn outcome_from_letter(letter: char) -> Outcome {
-    match letter.to_ascii_lowercase() {
-        'x' => Loss,
-        'y' => Draw,
-        'z' => Win,
+fn outcome_from_string(letter: &str) -> Outcome {
+    match letter.to_ascii_lowercase().as_ref() {
+        "x" => Loss,
+        "y" => Draw,
+        "z" => Win,
         other => panic!("Got unexpected character: {}", other),
     }
 }
@@ -76,13 +76,14 @@ fn action_from_outcome(opponent_action: Action, outcome: &Outcome) -> Action {
 fn part_one() {
     let file_path = "data.txt";
     let file = File::open(file_path).expect("File not found");
-    let strategy = io::BufReader::new(file).lines();
+    let strategies = io::BufReader::new(file).lines();
 
-    let score: u32 = strategy
+    let score: u32 = strategies
         .map(|game| {
             let strategy_string = game.unwrap().to_ascii_lowercase();
-            let opponent_action = action_from_letter(strategy_string.chars().nth(0).unwrap());
-            let my_action = action_from_letter(strategy_string.chars().nth(2).unwrap());
+            let (left, right) = strategy_string.split_once(' ').unwrap();
+            let opponent_action = action_from_string(left);
+            let my_action = action_from_string(right);
             let outcome = simulate_game(&opponent_action, &my_action);
 
             points_from_action(my_action) + points_from_outcome(&outcome)
@@ -96,13 +97,14 @@ fn part_one() {
 fn part_two() {
     let file_path = "data.txt";
     let file = File::open(file_path).expect("File not found");
-    let strategy = io::BufReader::new(file).lines();
+    let strategies = io::BufReader::new(file).lines();
 
-    let score: u32 = strategy
+    let score: u32 = strategies
         .map(|game| {
             let strategy_string = game.unwrap().to_ascii_lowercase();
-            let opponent_action = action_from_letter(strategy_string.chars().nth(0).unwrap());
-            let outcome = outcome_from_letter(strategy_string.chars().nth(2).unwrap());
+            let (left, right) = strategy_string.split_once(' ').unwrap();
+            let opponent_action = action_from_string(left);
+            let outcome = outcome_from_string(right);
             let action = action_from_outcome(opponent_action, &outcome);
 
             points_from_action(action) + points_from_outcome(&outcome)
