@@ -11,3 +11,4 @@ unused_variables = "allow"
 
 [dependencies]
 anyhow = "1.0.75"
+nom = "7.1.3"
