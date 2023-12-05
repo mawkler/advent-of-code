@@ -1,22 +1,16 @@
 use std::collections::HashMap;
 
-const DATA: &str = r#"two1nine
-eightwothree
-abcone2threexyz
-xtwone3four
-4nineeightseven2
-zoneight234
-7pqrstsixteen
-"#;
-
-fn get_first_digit(string: &str) -> Option<(char, usize)> {
-    let position = string.find(|c: char| c.is_ascii_digit())?;
-    let char = string.chars().nth(position)?;
-    Some((char, position))
-}
-
 fn get_literal_to_digit_mapping() -> HashMap<&'static str, char> {
     HashMap::from([
+        ("1", '1'),
+        ("2", '2'),
+        ("3", '3'),
+        ("4", '4'),
+        ("5", '5'),
+        ("6", '6'),
+        ("7", '7'),
+        ("8", '8'),
+        ("9", '9'),
         ("one", '1'),
         ("two", '2'),
         ("three", '3'),
@@ -29,39 +23,30 @@ fn get_literal_to_digit_mapping() -> HashMap<&'static str, char> {
     ])
 }
 
-/// Returns the leftmost literal digit and its index
-fn get_first_literal_digit(string: &str) -> Option<(&str, usize)> {
-    // TODO: has to be reversed when we're searching backwards
-    get_literal_to_digit_mapping()
-        .keys()
-        .filter_map(|&literal| string.find(literal).map(|i| (literal, i)))
-        .min_by_key(|&(_, i)| i)
+fn get_digits_from_string(string: &str) -> Vec<char> {
+    (0..string.len())
+        .flat_map(|offset| {
+            string.get(offset..).and_then(|substring| {
+                get_literal_to_digit_mapping()
+                    .into_iter()
+                    .find(|(literal, _)| substring.starts_with(literal))
+                    .map(|(_, digit)| digit)
+            })
+        })
+        .collect()
 }
 
-fn digit_from_literal(string: &str) -> Option<char> {
-    get_literal_to_digit_mapping().get(string).cloned()
+fn get_first_digit(string: &str) -> Option<char> {
+    get_digits_from_string(string).into_iter().next()
 }
 
-fn get_leftmost_pos<T>(d1: (T, usize), d2: (T, usize)) -> (T, usize) {
-    std::cmp::min_by_key(d1, d2, |&(_, i)| i)
-}
-
-fn get_first_digit_or_literal(string: &str) -> Option<char> {
-    let digit = get_first_digit(string);
-    let literal =
-        get_first_literal_digit(string).and_then(|l| Some((digit_from_literal(l.0)?, l.1)));
-
-    digit
-        .or(literal)
-        .and_then(|d| literal.map(|l| get_leftmost_pos(l, d)))
-        .or(digit)
-        .map(|(leftmost, _)| leftmost)
+fn get_last_digit(string: &str) -> Option<char> {
+    get_digits_from_string(string).into_iter().last()
 }
 
 fn get_first_and_last_digit(string: &str) -> (char, char) {
-    let first = get_first_digit_or_literal(string).expect("Must exist");
-    let reversed_string: String = string.chars().rev().collect();
-    let last = get_first_digit_or_literal(&reversed_string).expect("Must exist");
+    let first = get_first_digit(string).expect("Must exist");
+    let last = get_last_digit(string).expect("Must exist");
 
     (first, last)
 }
@@ -74,36 +59,39 @@ fn extract_number_from_line(string: &str) -> u32 {
 fn main() {
     let data = include_str!("../../data/day1");
     let sum: u32 = data.lines().map(extract_number_from_line).sum();
-    println!("Day 1.1: {:#?}", sum);
 
-    let res: Vec<_> = DATA
-        .lines()
-        .map(|l| {
-            println!("l = {:#?}", l);
-            extract_number_from_line(l)
-        })
-        .collect();
-    println!("res = {:#?}", res);
-
-    // let result = get_first_literal_digit(DATA.lines().next().unwrap());
-    // let result = get_first_and_last_digit("two4");
-    // println!("result = {:#?}", result);
+    println!("Day 1.2: {:#?}", sum);
 }
 
 #[test]
-fn gets_first_and_last() {
-    let string = "twoooo4";
-    assert_eq!(get_first_and_last_digit(string), ('2', '4'))
+fn find_first_digit() {
+    assert_eq!(get_first_digit("two1nine"), Some('2'));
+    assert_eq!(get_first_digit("eightwothree"), Some('8'));
+    assert_eq!(get_first_digit("abcone2threexyz"), Some('1'));
+    assert_eq!(get_first_digit("xtwone3four"), Some('2'));
+    assert_eq!(get_first_digit("4nineeightseven2"), Some('4'));
+    assert_eq!(get_first_digit("zoneight234"), Some('1'));
+    assert_eq!(get_first_digit("7pqrstsixteen"), Some('7'));
 }
 
 #[test]
-fn gets_first_digit() {
-    let string = "f4wheew";
-    assert_eq!(get_first_digit_or_literal(string), Some('4'));
+fn find_last_digit() {
+    assert_eq!(get_last_digit("two1nine"), Some('9'));
+    assert_eq!(get_last_digit("eightwothree"), Some('3'));
+    assert_eq!(get_last_digit("abcone2threexyz"), Some('3'));
+    assert_eq!(get_last_digit("xtwone3four"), Some('4'));
+    assert_eq!(get_last_digit("4nineeightseven2"), Some('2'));
+    assert_eq!(get_last_digit("zoneight234"), Some('4'));
+    assert_eq!(get_last_digit("7pqrstsixteen"), Some('6'));
 }
 
 #[test]
-fn gets_first_literal() {
-    let string = "eightwothree";
-    assert_eq!(get_first_digit_or_literal(string), Some('8'));
+fn find_number() {
+    assert_eq!(extract_number_from_line("two1nine"), 29);
+    assert_eq!(extract_number_from_line("eightwothree"), 83);
+    assert_eq!(extract_number_from_line("abcone2threexyz"), 13);
+    assert_eq!(extract_number_from_line("xtwone3four"), 24);
+    assert_eq!(extract_number_from_line("4nineeightseven2"), 42);
+    assert_eq!(extract_number_from_line("zoneight234"), 14);
+    assert_eq!(extract_number_from_line("7pqrstsixteen"), 76);
 }
