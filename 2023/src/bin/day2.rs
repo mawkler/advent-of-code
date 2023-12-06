@@ -1,10 +1,12 @@
+use std::ops::Add;
+
 use nom::{
     branch::alt,
     bytes::complete::tag,
     character::complete::{alpha1, digit1},
     combinator::{map, map_res},
     multi::separated_list1,
-    sequence::{delimited, separated_pair},
+    sequence::{delimited, separated_pair, tuple},
     IResult,
 };
 
@@ -28,7 +30,44 @@ impl From<&str> for Color {
             "red" => Color::Red,
             "green" => Color::Green,
             "blue" => Color::Blue,
-            _ => panic!(),
+            other => panic!("Found unexpected color '{}' found", other),
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+struct Game {
+    id: u32,
+    reds: u32,
+    greens: u32,
+    blues: u32,
+}
+
+impl Add<Color> for Game {
+    type Output = Game;
+
+    fn add(self, color: Color) -> Game {
+        // Game {
+        //     id: self.id,
+        //     reds: self.count(color),
+        // }
+        todo!()
+    }
+}
+
+impl From<(u32, Vec<(u32, Color)>)> for Game {
+    fn from((id, colors): (u32, Vec<(u32, Color)>)) -> Self {
+        // colors.into_iter().fold(init, f)
+        todo!()
+    }
+}
+
+impl Game {
+    fn count(&self, color: Color) -> u32 {
+        match color {
+            Color::Red => self.reds,
+            Color::Green => self.greens,
+            Color::Blue => self.blues,
         }
     }
 }
@@ -49,7 +88,9 @@ fn parse_colors(i: &str) -> IResult<&str, Vec<(u32, Color)>> {
     separated_list1(alt((tag(", "), tag("; "))), parse_color)(i)
 }
 
-fn parse_line(i: &str) {}
+fn parse_line(i: &str) -> IResult<&str, (u32, Vec<(u32, Color)>)> {
+    tuple((parse_game_id, parse_colors))(i)
+}
 
 fn main() {
     let result = parse_colors("1 blue, 2 green; 3 green, 4 blue, 1 red; 1 green, 1 blue");
@@ -90,5 +131,27 @@ fn parses_colors() {
                 (1, Color::Blue,),
             ],
         ),)
+    );
+}
+
+#[test]
+fn parses_line() {
+    let line = parse_line("Game 1: 3 blue, 4 red; 1 red, 2 green, 6 blue; 2 green");
+    assert_eq!(
+        line,
+        Ok((
+            "",
+            (
+                1,
+                vec![
+                    (3, Color::Blue,),
+                    (4, Color::Red,),
+                    (1, Color::Red,),
+                    (2, Color::Green,),
+                    (6, Color::Blue,),
+                    (2, Color::Green,),
+                ],
+            ),
+        ))
     );
 }
