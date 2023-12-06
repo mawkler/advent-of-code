@@ -1,5 +1,4 @@
-use std::ops::Add;
-
+use self::Color::{Blue, Green, Red};
 use nom::{
     branch::alt,
     bytes::complete::tag,
@@ -9,15 +8,11 @@ use nom::{
     sequence::{delimited, separated_pair, tuple},
     IResult,
 };
+use std::{collections::HashMap, ops::Add};
 
-const DATA: &str = r#"Game 1: 3 blue, 4 red; 1 red, 2 green, 6 blue; 2 green
-Game 2: 1 blue, 2 green; 3 green, 4 blue, 1 red; 1 green, 1 blue
-Game 3: 8 green, 6 blue, 20 red; 5 blue, 4 red, 13 green; 5 green, 1 red
-Game 4: 1 green, 3 red, 6 blue; 3 green, 6 red; 3 green, 15 blue, 14 red
-Game 5: 6 red, 1 blue, 3 green; 2 blue, 1 red, 2 green
-"#;
+type Count = u16;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 enum Color {
     Red,
     Green,
@@ -27,56 +22,62 @@ enum Color {
 impl From<&str> for Color {
     fn from(s: &str) -> Self {
         match s {
-            "red" => Color::Red,
-            "green" => Color::Green,
-            "blue" => Color::Blue,
-            other => panic!("Found unexpected color '{}' found", other),
+            "red" => Red,
+            "green" => Green,
+            "blue" => Blue,
+            other => panic!("Unexpected color '{}' found", other),
         }
     }
 }
 
+type Id = u32;
+
 #[derive(Debug, Default)]
 struct Game {
-    id: u32,
-    reds: u32,
-    greens: u32,
-    blues: u32,
+    id: Id,
+    colors: HashMap<Color, Count>,
 }
 
-impl Add<Color> for Game {
+impl Add<(Count, Color)> for Game {
     type Output = Game;
 
-    fn add(self, color: Color) -> Game {
-        // Game {
-        //     id: self.id,
-        //     reds: self.count(color),
-        // }
-        todo!()
+    fn add(self, (count, color): (Count, Color)) -> Game {
+        let mut colors = self.colors.clone();
+        *colors.entry(color).or_insert(0) += count;
+
+        Game {
+            id: self.id,
+            colors,
+        }
     }
 }
 
-impl From<(u32, Vec<(u32, Color)>)> for Game {
-    fn from((id, colors): (u32, Vec<(u32, Color)>)) -> Self {
-        // colors.into_iter().fold(init, f)
-        todo!()
+impl From<(Id, Vec<(Count, Color)>)> for Game {
+    fn from((id, colors): (Id, Vec<(Count, Color)>)) -> Self {
+        colors
+            .into_iter()
+            .fold(Game::new(id), |game, color| game + color)
     }
 }
 
 impl Game {
-    fn count(&self, color: Color) -> u32 {
-        match color {
-            Color::Red => self.reds,
-            Color::Green => self.greens,
-            Color::Blue => self.blues,
+    fn new(id: Id) -> Self {
+        Game {
+            id,
+            colors: HashMap::new(),
         }
+    }
+
+    fn count(&self, color: Color) -> Count {
+        *self.colors.get(&color).unwrap_or(&0)
     }
 }
 
-fn parse_game_id(i: &str) -> IResult<&str, u32> {
+fn parse_game_id(i: &str) -> IResult<&str, Id> {
     delimited(tag("Game "), map_res(digit1, str::parse), tag(": "))(i)
 }
 
-fn parse_color(i: &str) -> IResult<&str, (u32, Color)> {
+fn parse_color(i: &str) -> IResult<&str, (Count, Color)> {
     separated_pair(
         map_res(digit1, str::parse),
         tag(" "),
@@ -84,26 +85,37 @@ fn parse_color(i: &str) -> IResult<&str, (u32, Color)> {
     )(i)
 }
 
-fn parse_colors(i: &str) -> IResult<&str, Vec<(u32, Color)>> {
+fn parse_colors(i: &str) -> IResult<&str, Vec<(Count, Color)>> {
     separated_list1(alt((tag(", "), tag("; "))), parse_color)(i)
 }
 
-fn parse_line(i: &str) -> IResult<&str, (u32, Vec<(u32, Color)>)> {
-    tuple((parse_game_id, parse_colors))(i)
+fn parse_line(i: &str) -> Game {
+    let (_, game) = tuple((parse_game_id, parse_colors))(i).unwrap();
+
+    game.into()
+}
+
+fn possible_games(lines: &str) -> Vec<Id> {
+    lines
+        .lines()
+        .map(parse_line)
+        .filter(|game| game.count(Red) <= 12 && game.count(Green) <= 13 && game.count(Blue) <= 14)
+        .map(|game| game.id)
+        .collect()
 }
 
 fn main() {
-    let result = parse_colors("1 blue, 2 green; 3 green, 4 blue, 1 red; 1 green, 1 blue");
-    println!("result = {:#?}", result);
-
-    let res = parse_game_id("Game 1: foo");
-    println!("foo = {:#?}", res);
+    let data = include_str!("../../data/day2");
+    let game_ids = possible_games(data);
+    println!("game_ids = {:#?}", game_ids);
+    let id_sum: u32 = game_ids.iter().sum();
+    println!("id_sum = {:#?}", id_sum);
 }
 
 #[test]
 fn parses_color() {
     let input = "1 blue";
-    assert_eq!(parse_color(input), Ok(("", (1, Color::Blue))));
+    assert_eq!(parse_color(input), Ok(("", (1, Blue))));
 }
 
 #[test]
@@ -122,13 +134,13 @@ fn parses_colors() {
         Ok((
             "",
             vec![
-                (1, Color::Blue,),
-                (2, Color::Green,),
-                (3, Color::Green,),
-                (4, Color::Blue,),
-                (1, Color::Red,),
-                (1, Color::Green,),
-                (1, Color::Blue,),
+                (1, Blue,),
+                (2, Green,),
+                (3, Green,),
+                (4, Blue,),
+                (1, Red,),
+                (1, Green,),
+                (1, Blue,),
             ],
         ),)
     );
@@ -136,22 +148,24 @@ fn parses_colors() {
 
 #[test]
 fn parses_line() {
-    let line = parse_line("Game 1: 3 blue, 4 red; 1 red, 2 green, 6 blue; 2 green");
-    assert_eq!(
-        line,
-        Ok((
-            "",
-            (
-                1,
-                vec![
-                    (3, Color::Blue,),
-                    (4, Color::Red,),
-                    (1, Color::Red,),
-                    (2, Color::Green,),
-                    (6, Color::Blue,),
-                    (2, Color::Green,),
-                ],
-            ),
-        ))
-    );
+    let game = parse_line("Game 1: 3 blue, 4 red; 1 red, 2 green, 6 blue; 2 green");
+
+    assert_eq!(game.count(Red), 5);
+    assert_eq!(game.count(Green), 4);
+    assert_eq!(game.count(Blue), 9);
+}
+
+#[test]
+fn adds_color_to_game() {
+    let game = Game::default();
+    let game = game + (2, Red);
+
+    assert_eq!(game.count(Red), 2);
+    assert_eq!(game.count(Green), 0);
+    assert_eq!(game.count(Blue), 0);
+
+    let game = game + (9, Blue);
+    assert_eq!(game.count(Red), 2);
+    assert_eq!(game.count(Green), 0);
+    assert_eq!(game.count(Blue), (9));
 }
