@@ -1,6 +1,5 @@
 use self::Color::{Blue, Green, Red};
 use nom::{
-    branch::alt,
     bytes::complete::tag,
     character::complete::{alpha1, digit1},
     combinator::{map, map_res},
@@ -9,8 +8,6 @@ use nom::{
     IResult,
 };
 use std::{collections::HashMap, ops::Add};
-
-type Count = u16;
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 enum Color {
@@ -30,46 +27,47 @@ impl From<&str> for Color {
     }
 }
 
+type Count = u16;
+type Draw = HashMap<Color, Count>;
 type Id = u32;
 
 #[derive(Debug, Default)]
 struct Game {
     id: Id,
-    colors: HashMap<Color, Count>,
+    draws: Vec<Draw>,
 }
 
-impl Add<(Count, Color)> for Game {
+impl Add<Draw> for Game {
     type Output = Game;
 
-    fn add(self, (count, color): (Count, Color)) -> Game {
-        let mut colors = self.colors.clone();
-        *colors.entry(color).or_insert(0) += count;
+    fn add(self, draw: Draw) -> Game {
+        let mut draws = self.draws.clone();
+        draws.push(draw);
 
-        Game {
-            id: self.id,
-            colors,
-        }
+        Game { id: self.id, draws }
     }
 }
 
-impl From<(Id, Vec<(Count, Color)>)> for Game {
-    fn from((id, colors): (Id, Vec<(Count, Color)>)) -> Self {
-        colors
+impl From<(Id, Vec<Draw>)> for Game {
+    fn from((id, draws): (Id, Vec<Draw>)) -> Self {
+        draws
             .into_iter()
-            .fold(Game::new(id), |game, color| game + color)
+            .fold(Game::new(id), |game, draw| game + draw)
     }
 }
 
 impl Game {
     fn new(id: Id) -> Self {
-        Game {
-            id,
-            colors: HashMap::new(),
-        }
+        Game { id, draws: vec![] }
     }
 
-    fn count(&self, color: Color) -> Count {
-        *self.colors.get(&color).unwrap_or(&0)
+    fn max_count(&self, color: Color) -> Count {
+        *self
+            .draws
+            .iter()
+            .map(|draw| draw.get(&color).unwrap_or(&0))
+            .max()
+            .expect("Game should contain draws")
     }
 }
 
@@ -85,12 +83,23 @@ fn parse_color(i: &str) -> IResult<&str, (Count, Color)> {
     )(i)
 }
 
-fn parse_colors(i: &str) -> IResult<&str, Vec<(Count, Color)>> {
-    separated_list1(alt((tag(", "), tag("; "))), parse_color)(i)
+fn into_draw(colors: Vec<(Count, Color)>) -> Draw {
+    colors
+        .into_iter()
+        .map(|(count, color)| (color, count))
+        .collect()
+}
+
+fn parse_draw(i: &str) -> IResult<&str, Draw> {
+    map(separated_list1(tag(", "), parse_color), into_draw)(i)
+}
+
+fn parse_draws(i: &str) -> IResult<&str, Vec<Draw>> {
+    separated_list1(tag("; "), parse_draw)(i)
 }
 
 fn parse_line(i: &str) -> Game {
-    let (_, game) = tuple((parse_game_id, parse_colors))(i).unwrap();
+    let (_, game) = tuple((parse_game_id, parse_draws))(i).unwrap();
 
     game.into()
 }
@@ -99,7 +108,9 @@ fn possible_games(lines: &str) -> Vec<Id> {
     lines
         .lines()
         .map(parse_line)
-        .filter(|game| game.count(Red) <= 12 && game.count(Green) <= 13 && game.count(Blue) <= 14)
+        .filter(|game| {
+            game.max_count(Red) <= 12 && game.max_count(Green) <= 13 && game.max_count(Blue) <= 14
+        })
         .map(|game| game.id)
         .collect()
 }
@@ -127,45 +138,29 @@ fn parses_game_id() {
 }
 
 #[test]
-fn parses_colors() {
-    let input = "1 blue, 2 green; 3 green, 4 blue, 1 red; 1 green, 1 blue";
-    assert_eq!(
-        parse_colors(input),
-        Ok((
-            "",
-            vec![
-                (1, Blue,),
-                (2, Green,),
-                (3, Green,),
-                (4, Blue,),
-                (1, Red,),
-                (1, Green,),
-                (1, Blue,),
-            ],
-        ),)
-    );
-}
-
-#[test]
 fn parses_line() {
     let game = parse_line("Game 1: 3 blue, 4 red; 1 red, 2 green, 6 blue; 2 green");
 
-    assert_eq!(game.count(Red), 5);
-    assert_eq!(game.count(Green), 4);
-    assert_eq!(game.count(Blue), 9);
+    assert_eq!(game.max_count(Red), 4);
+    assert_eq!(game.max_count(Green), 2);
+    assert_eq!(game.max_count(Blue), 6);
 }
 
 #[test]
 fn adds_color_to_game() {
     let game = Game::default();
-    let game = game + (2, Red);
 
-    assert_eq!(game.count(Red), 2);
-    assert_eq!(game.count(Green), 0);
-    assert_eq!(game.count(Blue), 0);
+    let draw: Draw = HashMap::from([(Red, 2)]);
+    let game = game + draw;
 
-    let game = game + (9, Blue);
-    assert_eq!(game.count(Red), 2);
-    assert_eq!(game.count(Green), 0);
-    assert_eq!(game.count(Blue), (9));
+    assert_eq!(game.max_count(Red), 2);
+    assert_eq!(game.max_count(Green), 0);
+    assert_eq!(game.max_count(Blue), 0);
+
+    let draw: Draw = HashMap::from([(Blue, 9)]);
+    let game = game + draw;
+
+    assert_eq!(game.max_count(Red), 2);
+    assert_eq!(game.max_count(Green), 0);
+    assert_eq!(game.max_count(Blue), (9));
 }
