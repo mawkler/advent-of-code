@@ -27,9 +27,9 @@ impl From<&str> for Color {
     }
 }
 
-type Count = u16;
+type Count = u32;
 type Draw = HashMap<Color, Count>;
-type Id = u32;
+type Id = u16;
 
 #[derive(Debug, Default)]
 struct Game {
@@ -100,7 +100,6 @@ fn parse_draws(i: &str) -> IResult<&str, Vec<Draw>> {
 
 fn parse_line(i: &str) -> Game {
     let (_, game) = tuple((parse_game_id, parse_draws))(i).unwrap();
-
     game.into()
 }
 
@@ -115,12 +114,22 @@ fn possible_games(lines: &str) -> Vec<Id> {
         .collect()
 }
 
+fn game_powers(lines: &str) -> Vec<u32> {
+    lines
+        .lines()
+        .map(parse_line)
+        .map(|game| game.max_count(Red) * game.max_count(Green) * game.max_count(Blue))
+        .collect()
+}
+
 fn main() {
     let data = include_str!("../../data/day2");
-    let game_ids = possible_games(data);
-    println!("game_ids = {:#?}", game_ids);
-    let id_sum: u32 = game_ids.iter().sum();
-    println!("id_sum = {:#?}", id_sum);
+    let id_sum: u16 = possible_games(data).iter().sum();
+    println!("Part 1: {}", id_sum);
+
+    let powers = game_powers(data);
+    let sum: u32 = powers.into_iter().sum();
+    println!("Part 2: {}", sum);
 }
 
 #[test]
