@@ -1,22 +1,37 @@
-use std::collections::HashMap;
+use indexmap::IndexMap;
+use std::cell::RefCell;
 
 type Id = u16;
+type Wins = u8;
 type Count = u32;
+type Card = (Wins, Count);
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 struct Pile {
-    cards: HashMap<Id, Count>,
+    cards: IndexMap<Id, RefCell<Count>>,
 }
 
 impl Pile {
-    fn generate_cards(&mut self) {
-        for (&id, &count) in &self.cards {
+    fn generate_cards(&self) {
+        for &id in self.cards.keys() {
+            // println!("self = {:#?}", self);
+            // println!("id = {:#?}", id);
+            let count = *self.cards.get(&id).expect("Id should exist").borrow();
+            // println!("count = {:#?}", count);
             let id = id as Count;
             let copy_ids = id + 1..=id + count;
+            println!("copy_ids = {:#?}", copy_ids);
 
             for id in copy_ids {
+                // println!("id = {:#?}", id);
                 // TODO: perhaps RefCell solves this?
-                *self.cards.entry(id as Id).or_insert(1) += count;
+                // *self.cards.entry(id as Id).or_insert(1) += *count.borrow();
+                // self.cards.entry(id as Id).or_insert(1.into()).borrow();
+                *self
+                    .cards
+                    .get(&(id as Id))
+                    .expect("Id should exist")
+                    .borrow_mut() += 1;
             }
         }
     }
@@ -24,16 +39,31 @@ impl Pile {
 
 impl From<Vec<Vec<Id>>> for Pile {
     fn from(value: Vec<Vec<Id>>) -> Self {
-        let cards: HashMap<Id, Count> = value
+        let cards: IndexMap<Id, RefCell<Count>> = value
             .into_iter()
             .enumerate()
             .map(|(i, card_numbers)| {
                 let generated_cards = card_numbers.len();
-                ((i + 1) as Id, generated_cards as Count)
+                ((i + 1) as Id, (generated_cards as Count).into())
             })
             .collect();
 
         Pile { cards }
+    }
+}
+
+impl std::fmt::Debug for Pile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut debug_struct = f.debug_struct("Pile");
+
+        self.cards
+            .iter()
+            .map(|(id, count_refcell)| (id.to_string(), count_refcell.borrow()))
+            .for_each(|(key, value)| {
+                debug_struct.field(&key, &value);
+            });
+
+        debug_struct.finish()
     }
 }
 
@@ -87,7 +117,8 @@ fn main() {
     "};
 
     let cards: Vec<_> = cards.lines().map(parse_winning_numbers).collect();
-    let mut pile: Pile = cards.into();
+    let pile: Pile = cards.into();
+    println!("pile = {:#?}", pile);
     pile.generate_cards();
 
     let r: Vec<_> = (5..=5).collect();
