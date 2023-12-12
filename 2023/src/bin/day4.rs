@@ -1,50 +1,58 @@
 use indexmap::IndexMap;
+use indoc::indoc;
 use std::cell::RefCell;
 
 type Id = u16;
 type Wins = u8;
 type Count = u32;
-type Card = (Wins, Count);
+
+#[derive(Debug)]
+struct Card {
+    wins: Wins,
+    count: Count,
+}
 
 #[derive(Default)]
 struct Pile {
-    cards: IndexMap<Id, RefCell<Count>>,
+    cards: IndexMap<Id, RefCell<Card>>,
 }
 
 impl Pile {
     fn generate_cards(&self) {
         for &id in self.cards.keys() {
-            // println!("self = {:#?}", self);
-            // println!("id = {:#?}", id);
-            let count = *self.cards.get(&id).expect("Id should exist").borrow();
-            // println!("count = {:#?}", count);
+            let card = self.cards.get(&id).expect("ID should exist").borrow();
             let id = id as Count;
-            let copy_ids = id + 1..=id + count;
-            println!("copy_ids = {:#?}", copy_ids);
+            let copy_ids = id + 1..=id + card.wins as u32;
 
             for id in copy_ids {
-                // println!("id = {:#?}", id);
-                // TODO: perhaps RefCell solves this?
-                // *self.cards.entry(id as Id).or_insert(1) += *count.borrow();
-                // self.cards.entry(id as Id).or_insert(1.into()).borrow();
-                *self
-                    .cards
+                self.cards
                     .get(&(id as Id))
-                    .expect("Id should exist")
-                    .borrow_mut() += 1;
+                    .expect("ID should exist")
+                    .borrow_mut()
+                    .count += card.count;
             }
         }
+    }
+
+    fn count_card_copies(&self) -> Count {
+        self.cards
+            .iter()
+            .map(|(_, count)| count.borrow().count)
+            .sum()
     }
 }
 
 impl From<Vec<Vec<Id>>> for Pile {
     fn from(value: Vec<Vec<Id>>) -> Self {
-        let cards: IndexMap<Id, RefCell<Count>> = value
+        let cards: IndexMap<Id, RefCell<Card>> = value
             .into_iter()
             .enumerate()
             .map(|(i, card_numbers)| {
                 let generated_cards = card_numbers.len();
-                ((i + 1) as Id, (generated_cards as Count).into())
+                let wins = generated_cards as Wins;
+                let card = Card { wins, count: 1 };
+
+                ((i + 1) as Id, card.into())
             })
             .collect();
 
@@ -88,12 +96,12 @@ fn parse_winning_numbers(line: &str) -> Vec<Id> {
 
     let left: Vec<_> = to_numbers(left_list);
     let right: Vec<_> = to_numbers(right_list);
-    let card_nr: Id = card_nr.parse().expect("Should be a number");
+    let _card_nr: Id = card_nr.parse().expect("Should be a number");
 
     find_winning_numbers(left, right)
 }
 
-fn card_value(numbers: Vec<Id>) -> Id {
+fn card_value(numbers: &Vec<Id>) -> Id {
     let count = numbers.len() as Id;
     if count == 0 {
         0
@@ -103,42 +111,32 @@ fn card_value(numbers: Vec<Id>) -> Id {
 }
 
 fn main() {
-    // let cards = include_str!("../../data/day4");
-
-    use indoc::indoc;
-
-    let cards = indoc! {"
-        Card 1: 41 48 83 86 17 | 83 86  6 31 17  9 48 53
-        Card 2: 13 32 20 16 61 | 61 30 68 82 17 32 24 19
-        Card 3:  1 21 53 59 44 | 69 82 63 72 16 21 14  1
-        Card 4: 41 92 73 84 69 | 59 84 76 51 58  5 54 83
-        Card 5: 87 83 26 28 32 | 88 30 70 12 93 22 82 36
-        Card 6: 31 18 13 56 72 | 74 77 10 23 35 67 36 11
-    "};
-
+    let cards = include_str!("../../data/day4");
     let cards: Vec<_> = cards.lines().map(parse_winning_numbers).collect();
-    let pile: Pile = cards.into();
-    println!("pile = {:#?}", pile);
-    pile.generate_cards();
 
-    let r: Vec<_> = (5..=5).collect();
-    println!("r = {:#?}", r);
+    // Day 1
+    let sum: Id = cards.iter().map(card_value).sum();
+    println!("Day 1: {}", sum);
+
+    // Day 2
+    let pile: Pile = cards.into();
+    pile.generate_cards();
+    let sum = pile.count_card_copies();
+    println!("Day 2: {}", sum);
 }
+
+const _CARDS: &str = indoc! {"
+    Card 1: 41 48 83 86 17 | 83 86  6 31 17  9 48 53
+    Card 2: 13 32 20 16 61 | 61 30 68 82 17 32 24 19
+    Card 3:  1 21 53 59 44 | 69 82 63 72 16 21 14  1
+    Card 4: 41 92 73 84 69 | 59 84 76 51 58  5 54 83
+    Card 5: 87 83 26 28 32 | 88 30 70 12 93 22 82 36
+    Card 6: 31 18 13 56 72 | 74 77 10 23 35 67 36 11
+"};
 
 #[test]
 fn parses_winning_numbers() {
-    use indoc::indoc;
-
-    let data = indoc! {"
-        Card 1: 41 48 83 86 17 | 83 86  6 31 17  9 48 53
-        Card 2: 13 32 20 16 61 | 61 30 68 82 17 32 24 19
-        Card 3:  1 21 53 59 44 | 69 82 63 72 16 21 14  1
-        Card 4: 41 92 73 84 69 | 59 84 76 51 58  5 54 83
-        Card 5: 87 83 26 28 32 | 88 30 70 12 93 22 82 36
-        Card 6: 31 18 13 56 72 | 74 77 10 23 35 67 36 11
-    "};
-
-    let winning_numbers: Vec<_> = data.lines().map(parse_winning_numbers).collect();
+    let winning_numbers: Vec<_> = _CARDS.lines().map(parse_winning_numbers).collect();
     assert_eq!(
         winning_numbers,
         vec![
@@ -153,22 +151,26 @@ fn parses_winning_numbers() {
 }
 
 #[test]
-fn generates_card_pile() {
-    use indoc::indoc;
-
-    let cards = indoc! {"
-        Card 1: 41 48 83 86 17 | 83 86  6 31 17  9 48 53
-        Card 2: 13 32 20 16 61 | 61 30 68 82 17 32 24 19
-        Card 3:  1 21 53 59 44 | 69 82 63 72 16 21 14  1
-        Card 4: 41 92 73 84 69 | 59 84 76 51 58  5 54 83
-        Card 5: 87 83 26 28 32 | 88 30 70 12 93 22 82 36
-        Card 6: 31 18 13 56 72 | 74 77 10 23 35 67 36 11
-    "};
-
-    let cards: Vec<_> = cards.lines().map(parse_winning_numbers).collect();
+fn instantiates_card_pile() {
+    let cards: Vec<_> = _CARDS.lines().map(parse_winning_numbers).collect();
     let pile: Pile = cards.into();
 
     let has_all_card_ids =
         (1..=pile.cards.len()).all(|card_id| pile.cards.get(&(card_id as Id)).is_some());
     assert!(has_all_card_ids)
+}
+
+#[test]
+fn generates_card_pile() {
+    let cards: Vec<_> = _CARDS.lines().map(parse_winning_numbers).collect();
+    let pile: Pile = cards.into();
+    pile.generate_cards();
+
+    let counts: Vec<_> = pile
+        .cards
+        .iter()
+        .map(|(_, count)| count.borrow().count)
+        .collect();
+
+    assert_eq!(counts, vec![1, 2, 4, 8, 14, 1]);
 }
