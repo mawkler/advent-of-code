@@ -27,15 +27,15 @@ impl From<Triple> for Range {
     }
 }
 
+#[derive(Debug)]
 struct Map<'a> {
     from: &'a str,
     to: &'a str,
     mappings: Vec<Range>,
 }
 
-impl<'a> From<(&'a str, Vec<Triple>)> for Map<'a> {
-    fn from((name, triples): (&'a str, Vec<Triple>)) -> Self {
-        let (from, to) = name.split_once("-to-").expect("Should exist in name");
+impl<'a> From<(&'a str, &'a str, Vec<Triple>)> for Map<'a> {
+    fn from((from, to, triples): (&'a str, &'a str, Vec<Triple>)) -> Self {
         let mappings: Vec<Range> = triples.into_iter().map(|triple| triple.into()).collect();
 
         Map { from, to, mappings }
@@ -43,29 +43,50 @@ impl<'a> From<(&'a str, Vec<Triple>)> for Map<'a> {
 }
 
 #[derive(Debug)]
-struct Almanac<'a>(HashMap<&'a str, Vec<Range>>);
+struct Almanac<'a>(HashMap<&'a str, Map<'a>>);
 
-impl<'a> std::ops::Deref for Almanac<'a> {
-    type Target = HashMap<&'a str, Vec<Range>>;
+impl<'a> Almanac<'a> {
+    fn map_number(&self, value: u32, source: &str) -> u32 {
+        let range = self
+            .get(source)
+            .expect("Source should exist")
+            .mappings
+            .iter()
+            .find(|&range| (range.source_start..range.source_start + range.count).contains(&value));
 
-    fn deref(&self) -> &Self::Target {
-        &self.0
+        match range {
+            Some(range) => {
+                let offset = value - range.source_start;
+                range.destination_start + value - range.source_start
+            }
+            None => value,
+        }
+    }
+
+    fn map(&self, value: u32, source: &str) {
+        let f = self.get(source).expect("Source should exist");
     }
 }
 
 impl<'a> From<Vec<(&'a str, Vec<Triple>)>> for Almanac<'a> {
-    fn from(lines: Vec<(&'a str, Vec<Triple>)>) -> Self {
-        let map = lines
+    fn from(mappings: Vec<(&'a str, Vec<Triple>)>) -> Self {
+        let almanac = mappings
             .into_iter()
-            .map(|(name, map_lines)| {
-                let map_ranges = map_lines.into_iter().map(|triple| triple.into()).collect();
+            .map(|(name, triples)| {
                 let (from, to) = name.split_once("-to-").expect("Should exist in name");
-
-                (from, map_ranges)
+                (from, (from, to, triples).into())
             })
             .collect();
 
-        Almanac(map)
+        Almanac(almanac)
+    }
+}
+
+impl<'a> std::ops::Deref for Almanac<'a> {
+    type Target = HashMap<&'a str, Map<'a>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
@@ -105,25 +126,17 @@ fn parse_almanac(i: &str) -> IResult<&str, RawAlmanac> {
         separated_list1(tag("\n\n"), parse_map),
     )(i)
 }
-fn map_number(value: u32, ranges: Vec<Range>) -> u32 {
-    let range = ranges
-        .iter()
-        .find(|&range| (range.source_start..range.source_start + range.count).contains(&value));
 
-    match range {
-        Some(range) => {
-            let offset = value - range.source_start;
-            range.destination_start + value - range.source_start
-        }
-        None => value,
-    }
+fn get_locations(string: &str) -> u32 {
+    let (seeds, almanac) = parse_almanac(string).unwrap().1;
+    let almanac: Almanac = almanac.into();
+    todo!();
 }
 
 fn main() {
     let almanac: Almanac = parse_almanac(DATA).finish().unwrap().1 .1.into();
 
-    let light = almanac.get("light");
-    println!("light = {:#?}", light);
+    // almanac.map_number(79, "seed")
 }
 
 const DATA: &str = indoc! {"
@@ -195,13 +208,13 @@ fn parses_almanac() {
 
 #[test]
 fn maps_range() {
-    let ranges = vec![(50, 98, 2).into(), (52, 50, 48).into()];
+    let almanac: Almanac = parse_almanac(DATA).finish().unwrap().1 .1.into();
 
-    assert_eq!(map_number(0, ranges.clone()), 0);
-    assert_eq!(map_number(49, ranges.clone()), 49);
-    assert_eq!(map_number(50, ranges.clone()), 52);
-    assert_eq!(map_number(51, ranges.clone()), 53);
-    assert_eq!(map_number(98, ranges.clone()), 50);
-    assert_eq!(map_number(99, ranges.clone()), 51);
-    assert_eq!(map_number(100, ranges.clone()), 100);
+    assert_eq!(almanac.map_number(0, "seed"), 0);
+    assert_eq!(almanac.map_number(49, "seed"), 49);
+    assert_eq!(almanac.map_number(50, "seed"), 52);
+    assert_eq!(almanac.map_number(51, "seed"), 53);
+    assert_eq!(almanac.map_number(98, "seed"), 50);
+    assert_eq!(almanac.map_number(99, "seed"), 51);
+    assert_eq!(almanac.map_number(100, "seed"), 100);
 }
