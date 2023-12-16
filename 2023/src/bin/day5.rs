@@ -1,4 +1,3 @@
-use indoc::indoc;
 use nom::{
     bytes::complete::{is_not, tag},
     character::complete::{digit1, newline, space1},
@@ -10,11 +9,13 @@ use nom::{
 };
 use std::collections::HashMap;
 
+type Number = u64;
+
 #[derive(Debug, Clone)]
 struct Range {
-    source_start: u32,
-    destination_start: u32,
-    count: u32,
+    source_start: Number,
+    destination_start: Number,
+    count: Number,
 }
 
 impl From<Triple> for Range {
@@ -29,27 +30,14 @@ impl From<Triple> for Range {
 
 #[derive(Debug)]
 struct Map<'a> {
-    from: &'a str,
+    _from: &'a str,
     to: &'a str,
     mappings: Vec<Range>,
 }
 
-impl<'a> From<(&'a str, &'a str, Vec<Triple>)> for Map<'a> {
-    fn from((from, to, triples): (&'a str, &'a str, Vec<Triple>)) -> Self {
-        let mappings: Vec<Range> = triples.into_iter().map(|triple| triple.into()).collect();
-
-        Map { from, to, mappings }
-    }
-}
-
-#[derive(Debug)]
-struct Almanac<'a>(HashMap<&'a str, Map<'a>>);
-
-impl<'a> Almanac<'a> {
-    fn map_number(&self, value: u32, source: &str) -> u32 {
+impl Map<'_> {
+    fn map_number(&self, value: Number) -> Number {
         let range = self
-            .get(source)
-            .expect("Source should exist")
             .mappings
             .iter()
             .find(|&range| (range.source_start..range.source_start + range.count).contains(&value));
@@ -57,14 +45,39 @@ impl<'a> Almanac<'a> {
         match range {
             Some(range) => {
                 let offset = value - range.source_start;
-                range.destination_start + value - range.source_start
+                range.destination_start + offset
             }
             None => value,
         }
     }
+}
 
-    fn map(&self, value: u32, source: &str) {
-        let f = self.get(source).expect("Source should exist");
+impl<'a> From<(&'a str, &'a str, Vec<Triple>)> for Map<'a> {
+    fn from((from, to, triples): (&'a str, &'a str, Vec<Triple>)) -> Self {
+        let mappings: Vec<Range> = triples.into_iter().map(|triple| triple.into()).collect();
+
+        Map {
+            _from: from,
+            to,
+            mappings,
+        }
+    }
+}
+
+#[derive(Debug)]
+struct Almanac<'a>(HashMap<&'a str, Map<'a>>);
+
+impl<'a> Almanac<'a> {
+    fn seed_to_location(&self, seed: Number) -> Number {
+        let mut current_map = self.get("seed");
+        let mut current_number = seed;
+
+        while let Some(map) = current_map {
+            current_number = map.map_number(current_number);
+            current_map = self.get(map.to);
+        }
+
+        current_number
     }
 }
 
@@ -90,15 +103,15 @@ impl<'a> std::ops::Deref for Almanac<'a> {
     }
 }
 
-fn parse_to_number(i: &str) -> IResult<&str, u32> {
+fn parse_to_number(i: &str) -> IResult<&str, Number> {
     map_res(digit1, str::parse)(i)
 }
 
-fn parse_seeds(i: &str) -> IResult<&str, Vec<u32>> {
+fn parse_seeds(i: &str) -> IResult<&str, Vec<Number>> {
     preceded(tag("seeds: "), separated_list1(tag(" "), parse_to_number))(i)
 }
 
-fn parse_map_line(i: &str) -> IResult<&str, (u32, u32, u32)> {
+fn parse_map_line(i: &str) -> IResult<&str, (Number, Number, Number)> {
     let (remaining, numbers) = separated_list1(space1, parse_to_number)(i)?;
 
     match numbers.as_slice() {
@@ -107,7 +120,7 @@ fn parse_map_line(i: &str) -> IResult<&str, (u32, u32, u32)> {
     }
 }
 
-type Triple = (u32, u32, u32);
+type Triple = (Number, Number, Number);
 
 fn parse_map(i: &str) -> IResult<&str, (&str, Vec<Triple>)> {
     separated_pair(
@@ -117,7 +130,7 @@ fn parse_map(i: &str) -> IResult<&str, (&str, Vec<Triple>)> {
     )(i)
 }
 
-type RawAlmanac<'a> = (Vec<u32>, Vec<(&'a str, Vec<Triple>)>);
+type RawAlmanac<'a> = (Vec<Number>, Vec<(&'a str, Vec<Triple>)>);
 
 fn parse_almanac(i: &str) -> IResult<&str, RawAlmanac> {
     separated_pair(
@@ -127,18 +140,24 @@ fn parse_almanac(i: &str) -> IResult<&str, RawAlmanac> {
     )(i)
 }
 
-fn get_locations(string: &str) -> u32 {
-    let (seeds, almanac) = parse_almanac(string).unwrap().1;
-    let almanac: Almanac = almanac.into();
-    todo!();
-}
-
 fn main() {
-    let almanac: Almanac = parse_almanac(DATA).finish().unwrap().1 .1.into();
+    let input = include_str!("../../data/day5");
+    let (seeds, almanac) = parse_almanac(input).finish().unwrap().1;
+    let almanac: Almanac = almanac.into();
 
-    // almanac.map_number(79, "seed")
+    let result = seeds
+        .iter()
+        .map(|&seed| almanac.seed_to_location(seed))
+        .min()
+        .expect("Min should exist");
+
+    println!("Part 1: {}", result);
 }
 
+#[cfg(test)]
+use indoc::indoc;
+
+#[cfg(test)]
 const DATA: &str = indoc! {"
     seeds: 79 14 55 13
 
@@ -177,10 +196,7 @@ const DATA: &str = indoc! {"
 
 #[test]
 fn parses_almanac() {
-    use nom::Finish;
-
     let (_, almanac) = parse_almanac(DATA).finish().unwrap();
-    println!("result = {:#?}", almanac);
     let expected = (
         vec![79, 14, 55, 13],
         vec![
@@ -209,12 +225,22 @@ fn parses_almanac() {
 #[test]
 fn maps_range() {
     let almanac: Almanac = parse_almanac(DATA).finish().unwrap().1 .1.into();
+    let map = almanac.get("seed").unwrap();
 
-    assert_eq!(almanac.map_number(0, "seed"), 0);
-    assert_eq!(almanac.map_number(49, "seed"), 49);
-    assert_eq!(almanac.map_number(50, "seed"), 52);
-    assert_eq!(almanac.map_number(51, "seed"), 53);
-    assert_eq!(almanac.map_number(98, "seed"), 50);
-    assert_eq!(almanac.map_number(99, "seed"), 51);
-    assert_eq!(almanac.map_number(100, "seed"), 100);
+    assert_eq!(map.map_number(0), 0);
+    assert_eq!(map.map_number(49), 49);
+    assert_eq!(map.map_number(50), 52);
+    assert_eq!(map.map_number(51), 53);
+    assert_eq!(map.map_number(98), 50);
+    assert_eq!(map.map_number(99), 51);
+    assert_eq!(map.map_number(100), 100);
+}
+
+#[test]
+fn maps_seeds() {
+    let almanac: Almanac = parse_almanac(DATA).finish().unwrap().1 .1.into();
+    assert_eq!(almanac.seed_to_location(79), 82);
+    assert_eq!(almanac.seed_to_location(14), 43);
+    assert_eq!(almanac.seed_to_location(55), 86);
+    assert_eq!(almanac.seed_to_location(13), 35);
 }
