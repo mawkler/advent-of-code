@@ -79,6 +79,12 @@ impl<'a> Almanac<'a> {
 
         current_number
     }
+
+    fn seeds_to_locations(&self, range_start: Number, count: Number) -> Vec<Number> {
+        (range_start..range_start + count)
+            .map(|seed| self.seed_to_location(seed))
+            .collect()
+    }
 }
 
 impl<'a> From<Vec<(&'a str, Vec<Triple>)>> for Almanac<'a> {
@@ -152,6 +158,15 @@ fn main() {
         .expect("Min should exist");
 
     println!("Part 1: {}", result);
+
+    let lowest_location = seeds
+        .iter()
+        .tuples()
+        .flat_map(|(&seeds, &count)| almanac.seeds_to_locations(seeds, count))
+        .min()
+        .expect("Should exist");
+
+    println!("Part 2: {}", lowest_location);
 }
 
 #[cfg(test)]
