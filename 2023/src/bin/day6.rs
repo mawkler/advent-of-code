@@ -1,7 +1,9 @@
-type Time = u32;
+use itertools::Itertools;
+
+type Time = u128;
 type Distance = u64;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 struct Race {
     time: Time,
     record_distance: Distance,
@@ -34,7 +36,7 @@ fn parse_line(line: &str) -> impl Iterator<Item = u64> + '_ {
         .map(Result::unwrap)
 }
 
-fn parse(string: &str) -> impl Iterator<Item = (u64, u64)> + '_ {
+fn parse_races(string: &str) -> impl Iterator<Item = Race> + '_ {
     let mut lines = string.lines();
     let times = lines.next().expect("Must exist");
     let distances = lines.next().expect("Must exist");
@@ -42,22 +44,49 @@ fn parse(string: &str) -> impl Iterator<Item = (u64, u64)> + '_ {
     let times = parse_line(times);
     let distances = parse_line(distances);
 
-    times.into_iter().zip(distances)
+    times.into_iter().zip(distances).map(Race::from)
+}
+
+trait JoinNumbers {
+    fn join_numbers(&mut self) -> u64;
+}
+
+impl<T: Iterator<Item = u64>> JoinNumbers for T {
+    fn join_numbers(&mut self) -> u64 {
+        self.map(|number| number.to_string())
+            .join("")
+            .parse()
+            .expect("Should be number")
+    }
+}
+
+fn parse_to_single_race(string: &str) -> Race {
+    let mut lines = string.lines();
+    let times = lines.next().expect("Must exist");
+    let distances = lines.next().expect("Must exist");
+
+    let time = parse_line(times).join_numbers();
+    let distance = parse_line(distances).join_numbers();
+
+    (time, distance).into()
 }
 
 fn main() {
     let data = include_str!("../../data/day6");
-    let product: usize = parse(data)
+    let product: usize = parse_races(data)
         .map(Race::from)
         .map(|race| race.get_best_charge_up_times().count())
         .product();
-
     println!("Part 1: {}", product);
+
+    let race2 = parse_to_single_race(data);
+    let best_times_count = race2.get_best_charge_up_times().count();
+    println!("Part 2: {}", best_times_count);
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{parse, Race};
+    use crate::{parse_races, Race};
     use indoc::indoc;
 
     #[test]
@@ -66,9 +95,12 @@ mod tests {
             Time:      7  15   30
             Distance:  9  40  200
         "};
-        let result: Vec<_> = parse(data).collect();
+        let result: Vec<_> = parse_races(data).collect();
 
-        assert_eq!(result, vec![(7, 9), (15, 40), (30, 200)]);
+        assert_eq!(
+            result,
+            vec![(7, 9).into(), (15, 40).into(), (30, 200).into()]
+        );
     }
 
     #[test]
