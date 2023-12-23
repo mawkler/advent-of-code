@@ -1,9 +1,11 @@
 use crate::Card::{Eight, Five, Four, Nine, Seven, Six, Three, Two, A, J, K, Q, T};
+use indoc::indoc;
 use itertools::Itertools;
 use std::{cmp::Ordering, collections::HashSet};
 
 #[derive(Debug, PartialEq, PartialOrd, Ord, Copy, Clone, Eq, Hash)]
 enum Card {
+    J,
     Two,
     Three,
     Four,
@@ -13,7 +15,6 @@ enum Card {
     Eight,
     Nine,
     T,
-    J,
     Q,
     K,
     A,
@@ -48,16 +49,20 @@ impl Hand {
     fn find_n_of_a_kind(&self, n: usize) -> HashSet<&Card> {
         self.0
             .iter()
-            .filter(|card| self.0.iter().filter(|c| c == card).count() == n)
+            .filter(|&card| self.0.iter().filter(|&c| c == card || *c == J).count() >= n)
             .collect()
     }
 
     fn has_n_of_a_kind(&self, n: usize) -> bool {
-        !self.find_n_of_a_kind(n).is_empty()
+        let res = !self.find_n_of_a_kind(n).is_empty();
+        res
     }
 
     fn has_full_house(&self) -> bool {
-        self.has_n_of_a_kind(3) && self.has_n_of_a_kind(2)
+        self.find_n_of_a_kind(3)
+            .into_iter()
+            .next()
+            .is_some_and(|triple| self.find_n_of_a_kind(2).iter().any(|&card| card != triple))
     }
 
     fn has_two_pair(&self) -> bool {
@@ -65,7 +70,7 @@ impl Hand {
     }
 
     fn has_one_pair(&self) -> bool {
-        self.find_n_of_a_kind(2).len() == 1
+        !self.find_n_of_a_kind(2).is_empty()
     }
 
     fn has_high_card(&self) -> bool {
@@ -113,14 +118,14 @@ impl Ord for Hand {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         let ordering = u32::from(self).cmp(&other.into());
         if let Ordering::Equal = ordering {
-            let (s, o) = self
+            let (self_card, other_card) = self
                 .0
                 .iter()
                 .zip(other.0.iter())
-                .find(|(&s, &o)| s != o)
+                .find(|(&self_card, &other_card)| self_card != other_card)
                 .unwrap();
 
-            s.cmp(o)
+            self_card.cmp(other_card)
         } else {
             ordering
         }
@@ -145,12 +150,22 @@ fn parse_line(line: &str) -> (Hand, u32) {
 }
 
 fn main() {
-    let hands = include_str!("../../data/day7").lines().map(parse_line);
+    // let data = include_str!("../../data/day7");
+
+    let data = indoc! {"
+        32T3K 765
+        T55J5 684
+        KK677 28
+        KTJJT 220
+        QQQJA 483
+    "};
+
+    let hands = data.lines().map(parse_line);
     let total_winnings: u32 = get_rankings(hands)
         .map(|(ranking, (_, bid))| ranking as u32 * bid)
         .sum();
 
-    println!("Part 1 = {}", total_winnings);
+    println!("Part 2 = {}", total_winnings);
 }
 
 #[cfg(test)]
@@ -175,13 +190,9 @@ mod tests {
     fn finds_n_of_a_kind() {
         let hand = Hand([K; 5]);
         assert!(hand.has_n_of_a_kind(5));
-        assert!(!hand.has_n_of_a_kind(4));
-        assert!(!hand.has_n_of_a_kind(3));
 
         let hand = Hand([K, K, K, K, Two]);
-        assert!(!hand.has_n_of_a_kind(5));
         assert!(hand.has_n_of_a_kind(4));
-        assert!(!hand.has_n_of_a_kind(3));
     }
 
     #[test]
@@ -197,36 +208,18 @@ mod tests {
     fn finds_two_pair() {
         let hand = Hand([Eight, Eight, Q, Q, Five]);
         assert!(hand.has_two_pair());
-
-        let hand = Hand([Eight, Eight, Q, Q, Q]);
-        assert!(!hand.has_two_pair());
-
-        let hand = Hand([Eight, Two, Q, Q, Q]);
-        assert!(!hand.has_two_pair());
     }
 
     #[test]
     fn finds_one_pair() {
         let hand = Hand([Eight, Eight, K, Q, A]);
         assert!(hand.has_one_pair());
-
-        let hand = Hand([Eight, Eight, Q, Q, K]);
-        assert!(!hand.has_one_pair());
-
-        let hand = Hand([Eight, Two, Q, Q, Q]);
-        assert!(!hand.has_one_pair());
-
-        let hand = Hand([Q, Q, Q, Q, Q]);
-        assert!(!hand.has_one_pair());
     }
 
     #[test]
     fn finds_high_card() {
-        let hand = Hand([T, K, A, Three, J]);
+        let hand = Hand([T, K, A, Three, Two]);
         assert!(hand.has_high_card());
-
-        let hand = Hand([Q, Q, Q, Q, Q]);
-        assert!(!hand.has_one_pair());
     }
 
     #[test]
@@ -244,32 +237,10 @@ mod tests {
     }
 
     #[test]
-    fn compares_hands() {
-        let hand1 = Hand([Three, Two, T, Three, K]);
-        let hand2 = Hand([T, Five, Five, J, Five]);
-        let hand3 = Hand([K, K, Six, Seven, Seven]);
-        let hand4 = Hand([K, T, J, J, T]);
-        let hand5 = Hand([Q, Q, Q, J, A]);
-
-        assert!(hand1 < hand2)
-    }
-
-    #[test]
-    fn compares_two_pairs() {
-        let hand1: Hand = "KK677".into();
-        let hand2: Hand = "KTJJT".into();
-
-        assert!(hand1 > hand2);
-
-        let hand1: Hand = "T55J5".into();
-        let hand2: Hand = "QQQJA".into();
-
-        assert!(hand1 < hand2);
-
-        let hand1: Hand = "KTJJT".into();
-        let hand2: Hand = "QQQJA".into();
-
-        assert!(hand1 < hand2);
+    fn compares_more_hands() {
+        assert!(Hand::from("KK677") < Hand::from("KTJJT"));
+        assert!(Hand::from("T55J5") < Hand::from("QQQJA"));
+        assert!(Hand::from("KTJJT") > Hand::from("QQQJA"));
     }
 
     #[test]
@@ -282,12 +253,37 @@ mod tests {
 
         let expected = vec![
             (Hand([Three, Two, T, Three, K]), 765),
-            (Hand([K, T, J, J, T]), 220),
             (Hand([K, K, Six, Seven, Seven]), 28),
             (Hand([T, Five, Five, J, Five]), 684),
             (Hand([Q, Q, Q, J, A]), 483),
+            (Hand([K, T, J, J, T]), 220),
         ];
 
         assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn handles_jokers() {
+        assert!(Hand::from("JJJJJ").has_n_of_a_kind(5));
+        assert!(Hand::from("KJJJJ").has_n_of_a_kind(5));
+        assert!(Hand::from("T55J5").has_n_of_a_kind(4));
+        assert!(Hand::from("KTJJT").has_n_of_a_kind(4));
+        assert!(Hand::from("QQQJA").has_n_of_a_kind(4));
+        assert!(Hand::from("JKKKT").has_n_of_a_kind(4));
+        assert!(Hand::from("JKK5T").has_n_of_a_kind(3));
+
+        assert!(Hand::from("KKJQQ").has_full_house());
+        assert!(Hand::from("KJJQQ").has_full_house());
+        assert!(Hand::from("KJJQQ").has_n_of_a_kind(4));
+        assert!(Hand::from("22299").has_full_house());
+
+        assert!(Hand::from("9JT3K").has_one_pair());
+        assert!(Hand::from("32T3K").has_one_pair());
+
+        assert!(Hand::from("KK677").has_two_pair());
+        assert!(Hand::from("J26J7").has_two_pair());
+        assert!(Hand::from("JJ627").has_n_of_a_kind(3));
+
+        assert!(Hand::from("J2345").has_high_card());
     }
 }
