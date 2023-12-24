@@ -1,5 +1,4 @@
 use crate::Card::{Eight, Five, Four, Nine, Seven, Six, Three, Two, A, J, K, Q, T};
-use indoc::indoc;
 use itertools::Itertools;
 use std::{cmp::Ordering, collections::HashSet};
 
@@ -59,14 +58,41 @@ impl Hand {
     }
 
     fn has_full_house(&self) -> bool {
-        self.find_n_of_a_kind(3)
-            .into_iter()
-            .next()
-            .is_some_and(|triple| self.find_n_of_a_kind(2).iter().any(|&card| card != triple))
+        // NOTE: may return `false` if jokers already caused hand to be a `four of a kind`
+        let card_frequencies = self.0.iter().counts();
+        let joker_count = card_frequencies.get(&J).unwrap_or(&0);
+        let mut card_frequencies = card_frequencies
+            .iter()
+            .filter(|(&card, _)| card != &J)
+            .sorted_by_key(|(_, &count)| count)
+            .rev();
+
+        let most_frequent = card_frequencies.next().unwrap();
+
+        if most_frequent.1 + joker_count == 3 {
+            let (_, second_most_frequent_count) = card_frequencies.next().unwrap();
+            second_most_frequent_count == &2
+        } else {
+            false
+        }
     }
 
     fn has_two_pair(&self) -> bool {
-        self.find_n_of_a_kind(2).len() >= 2
+        // NOTE: ignores some cases where the hand would be better than two pair
+        let card_frequencies = self.0.iter().counts();
+        let mut card_frequencies = card_frequencies
+            .iter()
+            .sorted_by_key(|(_, &count)| count)
+            .rev();
+
+        let (&most_frequent_card, &most_frequent_count) = card_frequencies.next().unwrap();
+
+        if most_frequent_card != &J && most_frequent_count >= 2 {
+            let second_most_frequent = card_frequencies.next().unwrap();
+            *second_most_frequent.0 == &J || second_most_frequent.1 >= &2
+        } else {
+            false
+        }
     }
 
     fn has_one_pair(&self) -> bool {
@@ -150,15 +176,7 @@ fn parse_line(line: &str) -> (Hand, u32) {
 }
 
 fn main() {
-    // let data = include_str!("../../data/day7");
-
-    let data = indoc! {"
-        32T3K 765
-        T55J5 684
-        KK677 28
-        KTJJT 220
-        QQQJA 483
-    "};
+    let data = include_str!("../../data/day7");
 
     let hands = data.lines().map(parse_line);
     let total_winnings: u32 = get_rankings(hands)
@@ -273,7 +291,6 @@ mod tests {
         assert!(Hand::from("JKK5T").has_n_of_a_kind(3));
 
         assert!(Hand::from("KKJQQ").has_full_house());
-        assert!(Hand::from("KJJQQ").has_full_house());
         assert!(Hand::from("KJJQQ").has_n_of_a_kind(4));
         assert!(Hand::from("22299").has_full_house());
 
@@ -281,9 +298,33 @@ mod tests {
         assert!(Hand::from("32T3K").has_one_pair());
 
         assert!(Hand::from("KK677").has_two_pair());
-        assert!(Hand::from("J26J7").has_two_pair());
         assert!(Hand::from("JJ627").has_n_of_a_kind(3));
 
         assert!(Hand::from("J2345").has_high_card());
+        assert!(Hand::from("J2345").has_high_card());
+    }
+
+    #[test]
+    fn handles_cards_from_real_data() {
+        assert!(Hand::from("2J299").has_full_house());
+        assert!(Hand::from("47TJ4").has_n_of_a_kind(3));
+        assert!(Hand::from("2J299") > Hand::from("47TJ4"));
+        assert!(!Hand::from("47TJ4").has_full_house());
+        assert!(Hand::from("J8228").has_full_house());
+        assert!(Hand::from("33663").has_full_house());
+        assert!(Hand::from("J9285").has_one_pair());
+        assert!(Hand::from("5825J").has_n_of_a_kind(3));
+        assert!(Hand::from("8JA6Q").has_one_pair());
+        assert!(Hand::from("QJ777").has_n_of_a_kind(4));
+        assert!(Hand::from("JJJJJ").has_n_of_a_kind(5));
+
+        assert!(Hand::from("KJKKK").has_n_of_a_kind(5));
+        assert!(Hand::from("JK9T3").has_n_of_a_kind(2));
+        assert!(Hand::from("82J22").has_n_of_a_kind(4));
+        assert!(Hand::from("Q266J").has_n_of_a_kind(3));
+        assert!(Hand::from("682J6").has_n_of_a_kind(3));
+        assert!(Hand::from("9J999").has_n_of_a_kind(5));
+        assert!(Hand::from("K269J").has_n_of_a_kind(2));
+        assert!(Hand::from("77JJJ").has_n_of_a_kind(5));
     }
 }
