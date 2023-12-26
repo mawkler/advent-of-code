@@ -1,4 +1,6 @@
 use indoc::indoc;
+use itertools::FoldWhile::{Continue, Done};
+use itertools::Itertools;
 use nom::{
     bytes::complete::tag,
     character::complete::{alpha1, char, newline},
@@ -12,31 +14,30 @@ use std::collections::HashMap;
 struct Network<'a>(HashMap<&'a str, (&'a str, &'a str)>);
 
 impl Network<'_> {
-    #![deny(clippy::infinite_iter)]
     fn follow(&self, instructions: &str) -> usize {
-        let mut node = "AAA";
-
-        instructions
+        let steps = instructions
             .chars()
             .cycle()
-            .map_while(|instruction| {
-                if node == "ZZZ" {
-                    return None::<()>;
+            .fold_while(vec!["AAA"], |acc, instruction| {
+                let node_name = *acc.last().unwrap();
+
+                if node_name == "ZZZ" {
+                    return Done(acc);
                 }
 
-                match instruction {
-                    'L' => {
-                        node = self.0.get(node).unwrap().0;
-                        Some(())
-                    }
-                    'R' => {
-                        node = self.0.get(node).unwrap().1;
-                        Some(())
-                    }
+                let next_node = match instruction {
+                    'L' => self.0.get(node_name).unwrap().0,
+                    'R' => self.0.get(node_name).unwrap().1,
                     other => panic!("Unexpected direction '{}' found", other),
-                }
+                };
+
+                Continue(acc.into_iter().chain(Some(next_node)).collect())
             })
-            .count()
+            .into_inner()
+            .len();
+
+        // Count steps, not nodes
+        steps - 1
     }
 }
 
@@ -74,6 +75,26 @@ fn parse(i: &str) -> (&str, Network) {
 
 fn main() {
     let data = include_str!("../../data/day8");
+
+    // let data = indoc! {"
+    //     RL
+
+    //     AAA = (BBB, CCC)
+    //     BBB = (DDD, EEE)
+    //     CCC = (ZZZ, GGG)
+    //     DDD = (DDD, DDD)
+    //     EEE = (EEE, EEE)
+    //     GGG = (GGG, GGG)
+    //     ZZZ = (ZZZ, ZZZ)
+    // "};
+
+    // let data = indoc! {"
+    //     LLR
+
+    //     AAA = (BBB, BBB)
+    //     BBB = (AAA, ZZZ)
+    //     ZZZ = (ZZZ, ZZZ)
+    // "};
 
     let (instructions, network) = parse(data);
     let step_count = network.follow(instructions);
