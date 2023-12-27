@@ -15,28 +15,63 @@ use std::collections::HashMap;
 struct Network<'a>(HashMap<&'a str, (&'a str, &'a str)>);
 
 impl Network<'_> {
-    fn follow(&self, instructions: &str) -> usize {
-        let starting_nodes = self.get_starting_nodes();
-        let (count, _) = instructions
+    fn cycle_length(&self, instructions: &str, start_node_name: &str) -> usize {
+        let steps = instructions
             .chars()
             .cycle()
-            .fold_while((0, starting_nodes), |acc, instruction| {
-                let (count, nodes) = acc;
-                if nodes.iter().all(|node| node.ends_with('Z')) {
-                    return Done((count, nodes));
-                }
+            .fold_while(vec![start_node_name], |visited_nodes, instruction| {
+                let node_name = *visited_nodes.last().unwrap();
 
-                let new_acc = nodes.iter().map(|&node_name| match instruction {
+                let next_node = match instruction {
                     'L' => self.0.get(node_name).unwrap().0,
                     'R' => self.0.get(node_name).unwrap().1,
                     other => panic!("Unexpected direction '{}' found", other),
-                });
+                };
 
-                Continue((count + 1, new_acc.collect()))
+                if visited_nodes.len() > instructions.len() && visited_nodes.contains(&next_node) {
+                    let pos = visited_nodes
+                        .iter()
+                        .position(|node| node == &next_node)
+                        .unwrap();
+                    println!("acc.len() = {:#?}", visited_nodes.len());
+                    println!("pos = {:#?}", pos);
+                    println!("next_node = {:#?}", next_node);
+                    Done(visited_nodes)
+                } else {
+                    Continue(visited_nodes.into_iter().chain(Some(next_node)).collect())
+                }
             })
-            .into_inner();
+            .into_inner()
+            .len();
 
-        count
+        steps
+    }
+
+    fn path_length(&self, instructions: &str, start_node_name: &str) -> usize {
+        let steps = instructions
+            .chars()
+            .cycle()
+            .fold_while(vec![start_node_name], |acc, instruction| {
+                let node_name = *acc.last().unwrap();
+
+                let next_node = match instruction {
+                    'L' => self.0.get(node_name).unwrap().0,
+                    'R' => self.0.get(node_name).unwrap().1,
+                    other => panic!("Unexpected direction '{}' found", other),
+                };
+
+                if next_node.ends_with('Z') {
+                    println!("(path_length) next_node = {:#?}", next_node);
+                    // println!("acc = {:#?}", acc);
+                    Done(acc)
+                } else {
+                    Continue(acc.into_iter().chain(Some(next_node)).collect())
+                }
+            })
+            .into_inner()
+            .len();
+
+        steps
     }
 
     fn get_starting_nodes(&self) -> Vec<&str> {
@@ -54,10 +89,6 @@ impl<'a> From<Vec<Line<'a>>> for Network<'a> {
     fn from(lines: Vec<Line<'a>>) -> Self {
         Network(lines.into_iter().collect())
     }
-}
-
-fn node_ends_with_z(node: &str) -> bool {
-    node.ends_with('z')
 }
 
 fn parse_pair(i: &str) -> IResult<&str, (&str, &str)> {
@@ -107,9 +138,23 @@ fn main() {
     // "};
 
     let (instructions, network) = parse(data);
-    let step_count = network.follow(instructions);
 
-    println!("Part 2: {:?}", step_count);
+    let node = "PBA";
+    // let node = "22A";
+    let cycle = network.cycle_length(instructions, node);
+    println!("cycle = {:#?}", cycle);
+
+    let path_length = network.path_length(instructions, node);
+    println!("path_length = {:#?}", path_length);
+
+    // let step_count = network.count_steps(instructions);
+
+    // println!(
+    //     "network.get_starting_nodes() = {:#?}",
+    //     network.get_starting_nodes()
+    // );
+
+    // println!("Part 2: {:?}", step_count);
 }
 
 #[cfg(test)]
