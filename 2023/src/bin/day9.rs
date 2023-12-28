@@ -2,13 +2,17 @@ use itertools::Itertools;
 use std::iter;
 
 fn predict_next_value(triangle: Vec<Vec<i32>>) -> i32 {
-    triangle.iter().rev().fold(0, |diff, numbers| {
-        *numbers
-            .iter()
-            .chain(Some(&(numbers.last().unwrap() + diff)))
-            .last()
-            .unwrap()
-    })
+    triangle
+        .iter()
+        .rev()
+        .fold(0, |diff, numbers| numbers.last().unwrap() + diff)
+}
+
+fn predict_previous_value(triangle: Vec<Vec<i32>>) -> i32 {
+    triangle
+        .iter()
+        .rev()
+        .fold(0, |diff, numbers| numbers.first().unwrap() - diff)
 }
 
 fn build_triangle(numbers: Vec<i32>) -> Vec<Vec<i32>> {
@@ -33,18 +37,28 @@ fn get_differences(numbers: &[i32]) -> Vec<i32> {
 fn parse_lines(lines: &str) -> Vec<Vec<i32>> {
     lines
         .lines()
-        .map(|line| line.split(' ').map(|line| line.parse().unwrap()).collect())
+        .map(|line| line.split(' ').map(|num| num.parse().unwrap()).collect())
         .collect()
 }
 
 fn main() {
     let data = include_str!("../../data/day9");
     let lines = parse_lines(data);
+
     let sum: i32 = lines
+        .clone()
         .into_iter()
         .map(build_triangle)
         .map(predict_next_value)
         .sum();
 
     println!("Part 1: {}", sum);
+
+    let sum: i32 = lines
+        .into_iter()
+        .map(build_triangle)
+        .map(predict_previous_value)
+        .sum();
+
+    println!("Part 2: {}", sum);
 }
