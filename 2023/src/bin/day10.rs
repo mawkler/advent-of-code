@@ -37,14 +37,13 @@ impl Maze {
         self.get_tile(&neighbour_coordinate)
             .and_then(move |neighbour_tile| match neighbour_tile {
                 Tile::Pipe(pipe) => {
-                    let Pipe(d1, d2) = pipe;
-
-                    if d1.get_opposite() == *direction || d2.get_opposite() == *direction {
+                    if pipe.has_direction(&direction.get_opposite()) {
                         Some(neighbour_coordinate)
                     } else {
                         None
                     }
                 }
+                Tile::Start => Some(neighbour_coordinate),
                 _ => None,
             })
     }
@@ -64,8 +63,9 @@ impl Maze {
     fn follow_pipe(self, coordinate: &Coordinate, direction: &Direction) -> PipeIterator {
         PipeIterator {
             maze: self,
-            pipe_coordinate: *coordinate,
+            tile_coordinate: *coordinate,
             flow_direction: *direction,
+            done: false,
         }
     }
 }
@@ -73,25 +73,37 @@ impl Maze {
 // TODO: change to using references, and not cloning
 struct PipeIterator {
     maze: Maze,
-    pipe_coordinate: Coordinate,
+    tile_coordinate: Coordinate,
     flow_direction: Direction,
+    done: bool,
 }
 
 impl Iterator for PipeIterator {
     type Item = Coordinate;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let pipe_tile = self.maze.get_tile(&self.pipe_coordinate)?;
+        if self.done {
+            return None;
+        }
 
-        let neighbour_coordinate = self
-            .maze
-            .get_connected_pipe(&self.pipe_coordinate, &self.flow_direction)?;
-        let neighbour_pipe = self.maze.get_pipe(&neighbour_coordinate)?;
+        match self.maze.get_tile(&self.tile_coordinate)? {
+            Tile::Ground => None,
+            Tile::Start => {
+                self.done = true;
+                Some(self.tile_coordinate)
+            }
+            Tile::Pipe(pipe) => {
+                let tile_coordinate = self.tile_coordinate;
 
-        self.pipe_coordinate = neighbour_coordinate;
-        self.flow_direction = *neighbour_pipe.get_end_direction(&self.flow_direction);
+                self.flow_direction = *pipe.get_end_direction(&self.flow_direction);
+                let neighbour_coordinate = self
+                    .maze
+                    .get_connected_pipe(&tile_coordinate, &self.flow_direction)?;
+                self.tile_coordinate = neighbour_coordinate;
 
-        Some(neighbour_coordinate)
+                Some(tile_coordinate)
+            }
+        }
     }
 }
 
@@ -158,6 +170,10 @@ impl Pipe {
             &self.0
         }
     }
+
+    fn has_direction(&self, direction: &Direction) -> bool {
+        self.0 == *direction || self.1 == *direction
+    }
 }
 
 impl Display for Pipe {
@@ -221,9 +237,9 @@ fn main() {
     "};
 
     let maze: Maze = data.into();
-    let start = maze.find_start();
+    // let start = maze.find_start();
+    let start = Coordinate(0, 3);
     let iter = maze.follow_pipe(&start, &South);
-    println!("start = {:#?}", start);
 
     for pipe in iter {
         println!("pipe = {:#?}", pipe);
@@ -234,6 +250,8 @@ fn main() {
 mod tests {
     use crate::{Coordinate, Direction, Maze};
     use indoc::indoc;
+    use itertools::Itertools;
+    use pretty_assertions::assert_eq;
     use Direction::{East, North, South, West};
 
     #[test]
@@ -295,5 +313,28 @@ mod tests {
         .into();
 
         assert_eq!(maze.find_start(), Coordinate(2, 3));
+    }
+
+    #[test]
+    fn follows_pipe() {
+        let maze: Maze = indoc! {"
+            .....
+            .S-7.
+            .L-J.
+            .....
+        "}
+        .into();
+
+        let result = maze.follow_pipe(&Coordinate(1, 2), &South).collect_vec();
+        let expected = [
+            Coordinate(1, 2),
+            Coordinate(2, 2),
+            Coordinate(3, 2),
+            Coordinate(3, 1),
+            Coordinate(2, 1),
+            Coordinate(1, 1),
+        ];
+
+        assert_eq!(result, expected);
     }
 }
