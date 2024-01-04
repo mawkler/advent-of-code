@@ -1,5 +1,4 @@
 use self::Direction::{East, North, South, West};
-use indoc::indoc;
 use std::{fmt::Display, ops::Add};
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -60,25 +59,45 @@ impl Maze {
             .expect("Start tile should exist")
     }
 
-    fn follow_pipe(self, coordinate: &Coordinate, direction: &Direction) -> PipeIterator {
+    fn follow_pipe<'a>(&'a self, coordinate: Coordinate, direction: &'a Direction) -> PipeIterator {
         PipeIterator {
             maze: self,
-            tile_coordinate: *coordinate,
-            flow_direction: *direction,
+            tile_coordinate: coordinate,
+            flow_direction: direction,
             done: false,
         }
     }
+
+    fn get_loop_length(&self, start: Coordinate, direction: Direction) -> Option<usize> {
+        let iterator_start = &start + &direction.get_delta();
+        self.follow_pipe(iterator_start, &direction)
+            .enumerate()
+            .last()
+            .filter(|(_, last)| self.get_tile(last) == Some(&Tile::Start))
+            .map(|(count, _)| count)
+    }
+
+    fn find_loop(&self) -> Option<usize> {
+        let start = self.find_start();
+        // We only need to check half of the directions, since the pipe is looping back
+        [North, East]
+            .into_iter()
+            .find_map(|direction| self.get_loop_length(start, direction))
+    }
 }
 
-// TODO: change to using references, and not cloning
-struct PipeIterator {
-    maze: Maze,
+fn divide_rounding_up(a: i32, b: i32) -> i32 {
+    a / b + (a % b).signum()
+}
+
+struct PipeIterator<'a> {
+    maze: &'a Maze,
+    flow_direction: &'a Direction,
     tile_coordinate: Coordinate,
-    flow_direction: Direction,
     done: bool,
 }
 
-impl Iterator for PipeIterator {
+impl<'a> Iterator for PipeIterator<'a> {
     type Item = Coordinate;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -95,10 +114,10 @@ impl Iterator for PipeIterator {
             Tile::Pipe(pipe) => {
                 let tile_coordinate = self.tile_coordinate;
 
-                self.flow_direction = *pipe.get_end_direction(&self.flow_direction);
+                self.flow_direction = pipe.get_end_direction(self.flow_direction);
                 let neighbour_coordinate = self
                     .maze
-                    .get_connected_pipe(&tile_coordinate, &self.flow_direction)?;
+                    .get_connected_pipe(&tile_coordinate, self.flow_direction)?;
                 self.tile_coordinate = neighbour_coordinate;
 
                 Some(tile_coordinate)
@@ -223,27 +242,14 @@ impl Display for Tile {
     }
 }
 
-// let _ = [North, East, South, West].iter().filter(|&direction| {
-//     let todo!();
-// });
-
 fn main() {
-    let data = indoc! {"
-        ..F7.
-        .FJ|.
-        SJ.L7
-        |F--J
-        LJ...
-    "};
+    let data = include_str!("../../data/day10");
 
     let maze: Maze = data.into();
-    // let start = maze.find_start();
-    let start = Coordinate(0, 3);
-    let iter = maze.follow_pipe(&start, &South);
+    let loop_length = maze.find_loop();
 
-    for pipe in iter {
-        println!("pipe = {:#?}", pipe);
-    }
+    let farthest_away_position = divide_rounding_up(loop_length.unwrap() as _, 2);
+    println!("Part 1: {}", farthest_away_position);
 }
 
 #[cfg(test)]
@@ -325,7 +331,7 @@ mod tests {
         "}
         .into();
 
-        let result = maze.follow_pipe(&Coordinate(1, 2), &South).collect_vec();
+        let result = maze.follow_pipe(Coordinate(1, 2), &South).collect_vec();
         let expected = [
             Coordinate(1, 2),
             Coordinate(2, 2),
