@@ -1,4 +1,7 @@
 use self::Direction::{East, North, South, West};
+use indoc::indoc;
+use itertools::Itertools;
+use num::Integer;
 use std::{fmt::Display, ops::Add};
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -36,7 +39,7 @@ impl Maze {
         self.get_tile(&neighbour_coordinate)
             .and_then(move |neighbour_tile| match neighbour_tile {
                 Tile::Pipe(pipe) => {
-                    if pipe.has_direction(&direction.get_opposite()) {
+                    if pipe.points(&direction.get_opposite()) {
                         Some(neighbour_coordinate)
                     } else {
                         None
@@ -77,12 +80,70 @@ impl Maze {
             .map(|(count, _)| count)
     }
 
-    fn find_loop(&self) -> Option<usize> {
+    fn find_loop_length(&self) -> Option<usize> {
         let start = self.find_start();
         // We only need to check half of the directions, since the pipe is looping back
         [North, East]
             .into_iter()
             .find_map(|direction| self.get_loop_length(start, direction))
+    }
+
+    fn find_loop(&self) -> Option<Vec<Coordinate>> {
+        let start = self.find_start();
+
+        [North, East].into_iter().find_map(|direction| {
+            let iterator_start = &start + &direction.get_delta();
+            let pipe: Vec<_> = self.follow_pipe(iterator_start, &direction).collect();
+
+            self.get_tile(pipe.last()?)
+                .filter(|&tile| tile == &Tile::Start)
+                .map(|_| pipe)
+        })
+    }
+
+    fn is_on_pipe_loop(&self, coordinate: &Coordinate) -> bool {
+        let pipe_loop = self.find_loop().expect("Loop should exist");
+        pipe_loop.iter().any(|c| c == coordinate)
+    }
+
+    fn passed_pipe(window: (&Tile, &Tile)) -> bool {
+        matches!(window, (Tile::Pipe(_) | Tile::Start, tile) if !matches!(tile, Tile::Pipe(_)))
+    }
+
+    fn going_to_pass_pipe(window: (&Tile, &Tile)) -> bool {
+        matches!(window, (tile, Tile::Pipe(_) | Tile::Start) if !matches!(tile, Tile::Pipe(_)))
+    }
+
+    fn find_tiles_inside_loop(&self) {
+        let tiles = self.0.iter().map(|row| {
+            row.iter()
+                .tuple_windows()
+                .scan(0, |loop_crossings, window: (&Tile, &Tile)| {
+                    if Maze::passed_pipe(window) {
+                        *loop_crossings += 1;
+                    }
+
+                    Some(loop_crossings.is_odd())
+                })
+                .collect_vec()
+        });
+
+        let tiles = tiles.collect_vec();
+        // println!("tiles = {:?}", tiles);
+
+        println!("{}", Maze::to_string(tiles));
+
+        todo!();
+    }
+
+    fn to_string(maze: Vec<Vec<bool>>) -> String {
+        maze.iter()
+            .map(|row| {
+                row.iter()
+                    .map(|&tile| if tile { "I" } else { "O" })
+                    .join("")
+            })
+            .join("\n")
     }
 }
 
@@ -190,7 +251,7 @@ impl Pipe {
         }
     }
 
-    fn has_direction(&self, direction: &Direction) -> bool {
+    fn points(&self, direction: &Direction) -> bool {
         self.0 == *direction || self.1 == *direction
     }
 }
@@ -246,10 +307,24 @@ fn main() {
     let data = include_str!("../../data/day10");
 
     let maze: Maze = data.into();
-    let loop_length = maze.find_loop();
+    let loop_length = maze.find_loop_length();
 
     let farthest_away_position = divide_rounding_up(loop_length.unwrap() as _, 2);
     println!("Part 1: {}", farthest_away_position);
+
+    let maze: Maze = indoc! {"
+            .....
+            .F-7.
+            .S.|.
+            .L-J.
+            .....
+        "}
+    .into();
+
+    let loorp = maze.find_loop();
+    // println!("loorp = {:#?}", loorp);
+
+    maze.find_tiles_inside_loop();
 }
 
 #[cfg(test)]
