@@ -106,24 +106,31 @@ impl Maze {
         pipe_loop.iter().any(|c| c == coordinate)
     }
 
-    fn passed_pipe(window: (&Tile, &Tile)) -> bool {
-        matches!(window, (Tile::Pipe(_) | Tile::Start, tile) if !matches!(tile, Tile::Pipe(_)))
-    }
-
-    fn going_to_pass_pipe(window: (&Tile, &Tile)) -> bool {
-        matches!(window, (tile, Tile::Pipe(_) | Tile::Start) if !matches!(tile, Tile::Pipe(_)))
-    }
-
     fn find_tiles_inside_loop(&self) {
         let tiles = self.0.iter().map(|row| {
             row.iter()
-                .tuple_windows()
-                .scan(0, |loop_crossings, window: (&Tile, &Tile)| {
-                    if Maze::passed_pipe(window) {
-                        *loop_crossings += 1;
-                    }
+                .scan(0, |loop_crossings, tile| -> Option<bool> {
+                    let crosses_pipe = match tile {
+                        Tile::Pipe(pipe)
+                            if !pipe.points(&East)
+                                || pipe.points(&West) && !pipe.points(&East)
+                                || pipe.points(&East) && !pipe.points(&West) =>
+                        {
+                            true
+                        }
+                        Tile::Start => true,
+                        _ => false,
+                    };
 
-                    Some(loop_crossings.is_odd())
+                    if matches!(tile, Tile::Pipe(_)) || matches!(tile, Tile::Start) {
+                        if crosses_pipe {
+                            *loop_crossings += 1;
+                        }
+                        println!("tile = {}, loop_crossings = {:#?}", tile, loop_crossings);
+                        Some(false)
+                    } else {
+                        Some(loop_crossings.is_odd())
+                    }
                 })
                 .collect_vec()
         });
@@ -313,11 +320,15 @@ fn main() {
     println!("Part 1: {}", farthest_away_position);
 
     let maze: Maze = indoc! {"
-            .....
-            .F-7.
-            .S.|.
-            .L-J.
-            .....
+            ...........
+            .S-------7.
+            .|F-----7|.
+            .||.....||.
+            .||.....||.
+            .|L-7.F-J|.
+            .|..|.|..|.
+            .L--J.L--J.
+            ...........
         "}
     .into();
 
