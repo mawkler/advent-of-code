@@ -109,29 +109,35 @@ impl Maze {
     fn find_tiles_inside_loop(&self) {
         let tiles = self.0.iter().map(|row| {
             row.iter()
-                .scan(0, |loop_crossings, tile| -> Option<bool> {
-                    let crosses_pipe = match tile {
-                        Tile::Pipe(pipe)
-                            if !pipe.points(&East)
-                                || pipe.points(&West) && !pipe.points(&East)
-                                || pipe.points(&East) && !pipe.points(&West) =>
-                        {
-                            true
-                        }
-                        Tile::Start => true,
-                        _ => false,
-                    };
+                .scan(
+                    (0, false),
+                    |(loop_crossings, on_horizontal_edge), tile| -> Option<bool> {
+                        let crosses_pipe = match tile {
+                            Tile::Pipe(pipe) if !*on_horizontal_edge => true,
+                            Tile::Start => true,
+                            _ => false,
+                        };
 
-                    if matches!(tile, Tile::Pipe(_)) || matches!(tile, Tile::Start) {
-                        if crosses_pipe {
-                            *loop_crossings += 1;
+                        match tile {
+                            Tile::Pipe(pipe) if pipe.is_horizontal() => {
+                                *on_horizontal_edge = true;
+                                Some(false)
+                            }
+                            Tile::Pipe(_) | Tile::Start => {
+                                *on_horizontal_edge = false;
+                                if crosses_pipe {
+                                    *loop_crossings += 1;
+                                }
+                                println!("tile = {}, loop_crossings = {:#?}", tile, loop_crossings);
+                                Some(false)
+                            }
+                            _ => {
+                                *on_horizontal_edge = false;
+                                Some(loop_crossings.is_odd())
+                            }
                         }
-                        println!("tile = {}, loop_crossings = {:#?}", tile, loop_crossings);
-                        Some(false)
-                    } else {
-                        Some(loop_crossings.is_odd())
-                    }
-                })
+                    },
+                )
                 .collect_vec()
         });
 
@@ -260,6 +266,10 @@ impl Pipe {
 
     fn points(&self, direction: &Direction) -> bool {
         self.0 == *direction || self.1 == *direction
+    }
+
+    fn is_horizontal(&self) -> bool {
+        self.points(&East) && self.points(&West)
     }
 }
 
