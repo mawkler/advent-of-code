@@ -1,4 +1,29 @@
-fn sum(input: &str) -> i32 {
+pub fn sum_distances(input: &str) -> i32 {
+    let (mut lefts, mut rights) = parse_columns(input);
+
+    lefts.sort();
+    rights.sort();
+
+    lefts
+        .into_iter()
+        .zip(rights)
+        .map(|(left, right)| (left - right).abs())
+        .sum()
+}
+
+pub fn sum_similarities(input: &str) -> i32 {
+    let (lefts, rights) = parse_columns(input);
+
+    lefts
+        .into_iter()
+        .map(|left| {
+            let count = rights.iter().filter(|&right| left == *right).count();
+            left * count as i32
+        })
+        .sum()
+}
+
+fn parse_columns(input: &str) -> (Vec<i32>, Vec<i32>) {
     let lines: Vec<_> = input.lines().collect();
     let pairs: Vec<(i32, i32)> = lines
         .iter()
@@ -9,24 +34,14 @@ fn sum(input: &str) -> i32 {
         })
         .collect();
 
-    let (mut lefts, mut rights): (Vec<i32>, Vec<i32>) = pairs.into_iter().unzip();
-
-    lefts.sort();
-    rights.sort();
-
-    lefts
-        .into_iter()
-        .zip(rights)
-        .inspect(|f| {})
-        .map(|(left, right)| (left - right).abs())
-        .sum()
+    pairs.into_iter().unzip()
 }
 
-pub fn main() {
+fn main() {
     let data = include_str!("../../data/day1");
 
-    let sum = sum(data);
-    dbg!(&sum);
+    println!("Part 1: {}", sum_distances(data));
+    println!("Part 2: {}", sum_similarities(data));
 }
 
 #[cfg(test)]
@@ -34,9 +49,7 @@ mod tests {
     use super::*;
     use indoc::indoc;
 
-    #[test]
-    fn test() {
-        let input = indoc! {"
+    const INPUT: &str = indoc! {"
             3   4
             4   3
             2   5
@@ -44,6 +57,14 @@ mod tests {
             3   9
             3   3
         "};
-        assert_eq!(sum(input), 11);
+
+    #[test]
+    fn sums_distances() {
+        assert_eq!(sum_distances(INPUT), 11);
+    }
+
+    #[test]
+    fn sums_similarities() {
+        assert_eq!(sum_similarities(INPUT), 31);
     }
 }
