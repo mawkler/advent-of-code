@@ -1,6 +1,10 @@
+use itertools::Itertools;
+
+#[derive(Clone)]
 struct WordSearch(String);
 
 impl WordSearch {
+    // Part 1
     pub fn count_xmas(self) -> usize {
         let main_diagonals = Box::new(self.diagonals(&Diagonal::Main));
         let anti_diagonals = Box::new(self.diagonals(&Diagonal::Anti));
@@ -16,11 +20,75 @@ impl WordSearch {
             .sum()
     }
 
+    // Part 2
+    pub fn count_cross_mas(&self) -> usize {
+        let diagonal_mas_coordinates = [Diagonal::Main, Diagonal::Anti].iter().map(|direction| {
+            self.diagonals(direction)
+                .enumerate()
+                .flat_map(move |(diagonal, line)| {
+                    self.get_mas_coordinates(line, diagonal, direction)
+                })
+                .collect::<Vec<_>>()
+        });
+
+        let mas_counts_map = diagonal_mas_coordinates.into_iter().flatten().counts();
+
+        mas_counts_map.values().filter(|&&count| count > 1).count()
+    }
+
+    fn get_mas_coordinates(
+        &self,
+        line: String,
+        diagonal: usize,
+        direction: &Diagonal,
+    ) -> Vec<(usize, usize)> {
+        line.match_indices("MAS")
+            .chain(line.match_indices("SAM"))
+            .map(move |(index_on_diagonal, _)| {
+                self.coordinate_from_diagonal(
+                    diagonal,
+                    // The `+ 1` is to get the position of `A`
+                    index_on_diagonal + 1,
+                    direction,
+                )
+            })
+            .collect::<Vec<_>>()
+    }
     fn count_xmas_forward_backward(line: String) -> usize {
         let xmas = "XMAS";
         let line_backward: String = line.chars().rev().collect();
 
         line_backward.matches(xmas).count() + line.matches(xmas).count()
+    }
+
+    fn coordinate_from_diagonal(
+        &self,
+        diagonal: usize,
+        position: usize,
+        direction: &Diagonal,
+    ) -> (usize, usize) {
+        let width = self.get_width();
+
+        match *direction {
+            Diagonal::Anti => {
+                let padding = if diagonal < width {
+                    0
+                } else {
+                    diagonal - width + 1
+                };
+
+                (diagonal - position - padding, position + padding)
+            }
+            Diagonal::Main => {
+                if diagonal < width {
+                    let x = (width - 1) - diagonal + position;
+                    (x, position)
+                } else {
+                    let y = diagonal - (width - 1) + position;
+                    (position, y)
+                }
+            }
+        }
     }
 
     fn get_letter(&self, x: i32, y: i32) -> Option<char> {
@@ -62,7 +130,6 @@ enum Diagonal {
     Anti, // Northwest
 }
 
-#[derive(Clone)]
 struct DiagonalIterator<'a> {
     word_search: &'a WordSearch,
     position: usize,
@@ -142,7 +209,8 @@ fn main() {
     let data = include_str!("../../data/day4");
     let word_search = WordSearch(data.to_string());
 
-    println!("Part 1: {}", word_search.count_xmas());
+    println!("Part 1: {}", word_search.clone().count_xmas());
+    println!("Part 2: {}", word_search.count_cross_mas());
 }
 
 #[cfg(test)]
@@ -157,6 +225,12 @@ mod tests {
         .A..A.
         XMAS.S
         .X....
+    "};
+
+    const SMALL_WORD_SEARCH: &str = indoc! {"
+        abc
+        def
+        ghi
     "};
 
     #[test]
@@ -208,13 +282,7 @@ mod tests {
 
     #[test]
     fn gets_columns() {
-        let word_search = indoc! {"
-            abc
-            def
-            ghi
-        "};
-
-        let word_search = WordSearch(word_search.to_string());
+        let word_search = WordSearch(SMALL_WORD_SEARCH.to_string());
         let columns = word_search.columns().collect_vec();
 
         assert_equal(vec!["adg", "beh", "cfi"], columns);
@@ -243,5 +311,53 @@ mod tests {
         let word_search = WordSearch(word_search.to_string());
 
         assert_eq!(18, word_search.count_xmas());
+    }
+
+    #[test]
+    fn counts_mas() {
+        let word_search = indoc! {"
+            .M.S......
+            ..A..MSMS.
+            .M.S.MAA..
+            ..A.ASMSM.
+            .M.S.M....
+            ..........
+            S.S.S.S.S.
+            .A.A.A.A..
+            M.M.M.M.M.
+            ..........
+        "};
+        let word_search = WordSearch(word_search.to_string());
+
+        assert_eq!(9, word_search.count_cross_mas())
+    }
+
+    #[test]
+    fn converts_anti_diagonals_to_coordinates() {
+        let word_search = WordSearch(SMALL_WORD_SEARCH.to_string());
+        let anti = &Diagonal::Anti;
+
+        assert_eq!((1, 0), word_search.coordinate_from_diagonal(1, 0, anti));
+        assert_eq!((0, 1), word_search.coordinate_from_diagonal(1, 1, anti));
+        assert_eq!((2, 0), word_search.coordinate_from_diagonal(2, 0, anti));
+        assert_eq!((1, 1), word_search.coordinate_from_diagonal(2, 1, anti));
+        assert_eq!((0, 2), word_search.coordinate_from_diagonal(2, 2, anti));
+        assert_eq!((1, 2), word_search.coordinate_from_diagonal(3, 1, anti));
+        assert_eq!((2, 2), word_search.coordinate_from_diagonal(4, 0, anti));
+    }
+
+    #[test]
+    fn converts_main_diagonals_to_coordinates() {
+        let word_search = WordSearch(SMALL_WORD_SEARCH.to_string());
+        let main = &Diagonal::Main;
+
+        assert_eq!((1, 0), word_search.coordinate_from_diagonal(1, 0, main));
+        assert_eq!((2, 1), word_search.coordinate_from_diagonal(1, 1, main));
+        assert_eq!((0, 0), word_search.coordinate_from_diagonal(2, 0, main));
+        assert_eq!((1, 1), word_search.coordinate_from_diagonal(2, 1, main));
+        assert_eq!((2, 2), word_search.coordinate_from_diagonal(2, 2, main));
+        assert_eq!((0, 1), word_search.coordinate_from_diagonal(3, 0, main));
+        assert_eq!((1, 2), word_search.coordinate_from_diagonal(3, 1, main));
+        assert_eq!((0, 2), word_search.coordinate_from_diagonal(4, 0, main));
     }
 }

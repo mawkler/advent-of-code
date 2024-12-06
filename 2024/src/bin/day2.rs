@@ -44,7 +44,7 @@ fn is_safe_dampened(report: &[u32]) -> bool {
             .iter()
             .enumerate()
             .filter(move |(i, _)| *i != n)
-            .map(|(i, report)| *report)
+            .map(|(_, report)| *report)
             .collect_vec();
 
         is_safe(dampened_report.as_slice())
