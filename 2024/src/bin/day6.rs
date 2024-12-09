@@ -1,44 +1,97 @@
-use core::time;
 use itertools::Itertools;
-use std::{fmt::Display, thread::sleep};
+use std::{collections::HashSet, fmt::Display};
+
+// Part 1
+pub fn count_visited_tiles(map: &str) -> usize {
+    let mut lab = Lab::new(map);
+
+    while let State::Simulating = lab.move_guard() {
+        lab.map.set_tile_visited(lab.guard.position);
+    }
+
+    lab.map
+        .0
+        .iter()
+        .map(|line| line.iter().filter(|&tile| *tile == Tile::Visited).count())
+        .sum()
+}
+
+// Part 2
+fn count_looping_obstacle_placements(map: &str) -> usize {
+    // I create an initial lab here just to determine the height/width
+    let lab = Lab::new(map);
+    let width = lab.map.0.first().expect("Map has tiles").len() as u32;
+    let height = lab.map.0.len() as u32;
+
+    (0..height)
+        .flat_map(|y| {
+            (0..width)
+                // Exclude guard start position
+                .skip_while(move |&x| (x, y) == lab.guard_start_state.position)
+                .map(move |x| {
+                    let mut lab = Lab::new(map);
+                    lab.map.place_obstacle_tile((x, y));
+                    lab.simulate_guard_looping()
+                })
+        })
+        .filter(|state| *state == State::LoopFound)
+        .count()
+}
 
 type Coordinate = (u32, u32);
 
 struct Lab {
     map: Map,
     guard: Guard,
+    guard_start_state: Guard,
 }
 
+#[derive(Clone, PartialEq, Eq)]
 struct Guard {
     position: Coordinate,
     direction: Direction,
+    visited_states: HashSet<(Coordinate, Direction)>,
 }
 
 impl Guard {
     fn turn_right(&mut self) {
         self.direction = self.direction.turn_right();
     }
+
+    fn has_looped(&self) -> bool {
+        let current_state = &(self.position, self.direction.clone());
+        self.visited_states.contains(current_state)
+    }
 }
 
+#[derive(PartialEq, Debug)]
 enum State {
-    Done,
-    NotDone,
+    Simulating,
+    GuardLeft,
+    LoopFound,
 }
 
 impl Lab {
-    pub fn count_visited_tiles(&mut self) -> usize {
-        self.simulate();
-        self.map
-            .0
-            .iter()
-            .map(|line| line.iter().filter(|&tile| *tile == Tile::Visited).count())
-            .sum()
+    fn simulate(&mut self) {
+        while let State::Simulating = self.move_guard() {
+            self.map.set_tile_visited(self.guard.position);
+        }
     }
 
-    fn simulate(&mut self) {
-        // TODO: perhaps just inline `move_guard()` here?
-        while let State::NotDone = self.move_guard() {
-            sleep(time::Duration::from_millis(3));
+    fn simulate_guard_looping(&mut self) -> State {
+        loop {
+            let lab_state = self.move_guard();
+
+            if let State::GuardLeft = lab_state {
+                return lab_state;
+            }
+
+            if self.guard.has_looped() {
+                return State::LoopFound;
+            }
+
+            let guard_state = (self.guard.position, self.guard.direction.clone());
+            self.guard.visited_states.insert(guard_state);
             self.map.set_tile_visited(self.guard.position);
         }
     }
@@ -58,17 +111,23 @@ impl Lab {
             })
             .unwrap();
 
+        let guard_direction = Direction::Up;
         let guard = Guard {
             position: guard_coordinate,
-            direction: Direction::Up,
+            direction: guard_direction.clone(),
+            visited_states: HashSet::from([(guard_coordinate, guard_direction)]),
         };
 
-        Self { map, guard }
+        Self {
+            map,
+            guard_start_state: guard.clone(),
+            guard,
+        }
     }
 
     fn move_guard(&mut self) -> State {
         let Some(new_position) = self.get_new_guard_coordinate() else {
-            return State::Done;
+            return State::GuardLeft;
         };
 
         if let Tile::Obstacle = self.map.get_tile(new_position) {
@@ -77,7 +136,7 @@ impl Lab {
             self.guard.position = new_position;
         }
 
-        State::NotDone
+        State::Simulating
     }
 
     fn get_new_guard_coordinate(&self) -> Option<Coordinate> {
@@ -108,7 +167,7 @@ impl Lab {
 
 impl Display for Lab {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let lab: String = self
+        let lab = self
             .map
             .0
             .iter()
@@ -140,15 +199,21 @@ impl Map {
         line.get(x as usize).expect("Map has tiles")
     }
 
-    fn set_tile_visited(&mut self, (x, y): Coordinate) {
+    fn get_tile_mut(&mut self, (x, y): Coordinate) -> &mut Tile {
         let line = self.0.get_mut(y as usize).expect("Map has tiles");
-        let tile = line.get_mut(x as usize).expect("Map has tiles");
+        line.get_mut(x as usize).expect("Map has tiles")
+    }
 
-        *tile = Tile::Visited;
+    fn set_tile_visited(&mut self, coordinate: Coordinate) {
+        *self.get_tile_mut(coordinate) = Tile::Visited;
+    }
+
+    fn place_obstacle_tile(&mut self, coordinate: Coordinate) {
+        *self.get_tile_mut(coordinate) = Tile::Obstacle;
     }
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 enum Direction {
     Up,
     Right,
@@ -221,9 +286,9 @@ impl From<&str> for Map {
 
 fn main() {
     let data = include_str!("../../data/day6");
-    let mut lab = Lab::new(data);
 
-    println!("Part 1: {}", lab.count_visited_tiles());
+    println!("Part 1: {}", count_visited_tiles(data));
+    println!("Part 2: {}", count_looping_obstacle_placements(data));
 }
 
 #[cfg(test)]
@@ -286,5 +351,40 @@ mod tests {
         let lab = Lab::new(MAP).to_string();
 
         assert_eq!(MAP, lab);
+    }
+
+    #[test]
+    fn detects_guard_left() {
+        let mut lab = Lab::new(MAP);
+
+        let result = lab.simulate_guard_looping();
+        assert_eq!(State::GuardLeft, result);
+    }
+
+    #[test]
+    fn detects_guard_loop() {
+        let mut lab = Lab::new(MAP);
+
+        lab.map.place_obstacle_tile((3, 6));
+        let result = lab.simulate_guard_looping();
+
+        assert_eq!(State::LoopFound, result);
+    }
+
+    #[test]
+    fn detects_guard_loop_outside_starting_position() {
+        let mut lab = Lab::new(MAP);
+
+        lab.map.place_obstacle_tile((7, 7));
+        let result = lab.simulate_guard_looping();
+
+        assert_eq!(State::LoopFound, result);
+    }
+
+    #[test]
+    fn counts_guard_loops() {
+        let count = count_looping_obstacle_placements(MAP);
+
+        assert_eq!(6, count);
     }
 }
