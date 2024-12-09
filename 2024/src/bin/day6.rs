@@ -72,12 +72,6 @@ enum State {
 }
 
 impl Lab {
-    fn simulate(&mut self) {
-        while let State::Simulating = self.move_guard() {
-            self.map.set_tile_visited(self.guard.position);
-        }
-    }
-
     fn simulate_guard_looping(&mut self) -> State {
         loop {
             let lab_state = self.move_guard();
