@@ -4,7 +4,16 @@ use std::iter;
 // Part 1
 pub fn sum_valid_equations(equations: &str) -> Number {
     parse_calibration_equations(equations)
-        .filter_map(|(expected, numbers)| maybe_evaluate_equation(numbers, expected))
+        .filter(|(expected, numbers)| equation_is_valid(numbers, *expected))
+        .map(|(result, _)| result)
+        .sum()
+}
+
+// Part 2
+pub fn sum_valid_equations_with_concatenation(equations: &str) -> Number {
+    parse_calibration_equations(equations)
+        .filter(|(expected, numbers)| equation_is_valid_with_concatenation(numbers, *expected))
+        .map(|(result, _)| result)
         .sum()
 }
 
@@ -14,6 +23,7 @@ type Number = i64;
 enum Operator {
     Addition,
     Multiplication,
+    Concatenation,
 }
 
 struct Equation {
@@ -26,6 +36,7 @@ impl Operator {
         match self {
             Operator::Addition => left + right,
             Operator::Multiplication => left * right,
+            Operator::Concatenation => format!("{left}{right}").parse().expect("Is numeric"),
         }
     }
 }
@@ -66,24 +77,51 @@ fn create_operator_permutations(length: usize) -> impl Iterator<Item = Vec<Opera
         .multi_cartesian_product()
 }
 
-fn maybe_evaluate_equation(numbers: Vec<Number>, expected: Number) -> Option<Number> {
-    create_operator_permutations(numbers.len() - 1).find_map(move |operators| {
-        let numbers = numbers.clone();
-        let operators = operators.to_vec();
-        let result = Equation { numbers, operators }.evaluate();
+fn create_operator_permutations_with_concatenation(
+    length: usize,
+) -> impl Iterator<Item = Vec<Operator>> {
+    const OPERATORS: [Operator; 3] = [
+        Operator::Addition,
+        Operator::Multiplication,
+        Operator::Concatenation,
+    ];
 
-        if result == expected {
-            Some(result)
-        } else {
-            None
-        }
-    })
+    iter::repeat(OPERATORS.iter().cloned())
+        .take(length)
+        .multi_cartesian_product()
+}
+
+fn equation_is_valid(numbers: &[Number], expected: Number) -> bool {
+    create_operator_permutations(numbers.len() - 1)
+        .filter(move |operators| equation_has_expected_output(numbers, operators, expected))
+        .count()
+        > 0
+}
+
+fn equation_is_valid_with_concatenation(numbers: &[Number], expected: Number) -> bool {
+    create_operator_permutations_with_concatenation(numbers.len() - 1)
+        .filter(move |operators| equation_has_expected_output(numbers, operators, expected))
+        .count()
+        > 0
+}
+
+fn equation_has_expected_output(
+    numbers: &[Number],
+    operators: &[Operator],
+    expected: Number,
+) -> bool {
+    let numbers = numbers.to_vec();
+    let operators = operators.to_vec();
+    let result = Equation { numbers, operators }.evaluate();
+
+    result == expected
 }
 
 fn main() {
     let data = include_str!("../../data/day7");
 
     println!("Part 1: {}", sum_valid_equations(data));
+    println!("Part 2: {}", sum_valid_equations_with_concatenation(data));
 }
 
 #[cfg(test)]
@@ -139,5 +177,22 @@ mod tests {
         "};
 
         assert_eq!(3749, sum_valid_equations(equations));
+    }
+
+    #[test]
+    fn sums_valid_equations_with_concatenation() {
+        let equations = indoc! {"
+            190: 10 19
+            3267: 81 40 27
+            83: 17 5
+            156: 15 6
+            7290: 6 8 6 15
+            161011: 16 10 13
+            192: 17 8 14
+            21037: 9 7 18 13
+            292: 11 6 16 20
+        "};
+
+        assert_eq!(11387, sum_valid_equations_with_concatenation(equations));
     }
 }
