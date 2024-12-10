@@ -1,8 +1,8 @@
 use itertools::Itertools;
 use std::{
     collections::{HashMap, HashSet},
-    fmt::Debug,
-    ops::{Add, Sub},
+    fmt::{Debug, Display},
+    ops::{Add, Mul, Sub},
 };
 
 type Antennas = HashMap<char, HashSet<Coordinate>>;
@@ -26,6 +26,14 @@ impl Add for Coordinate {
     }
 }
 
+impl Mul<i32> for Coordinate {
+    type Output = Self;
+
+    fn mul(self, rhs: i32) -> Self::Output {
+        Coordinate(self.0 * rhs, self.1 * rhs)
+    }
+}
+
 #[derive(Debug)]
 struct Map {
     antennas: Antennas,
@@ -34,12 +42,12 @@ struct Map {
 }
 
 impl Map {
-    fn get_antinodes(&self) -> impl Iterator<Item = Coordinate> + use<'_> {
+    fn get_first_antinodes(&self) -> impl Iterator<Item = Coordinate> + use<'_> {
         self.antennas
             .values()
             .flat_map(|antennas| {
                 antennas.iter().permutations(2).flat_map(|coordinates| {
-                    let (a1, a2) = get_antinodes(*coordinates[0], *coordinates[1]);
+                    let (a1, a2) = get_first_antinodes(*coordinates[0], *coordinates[1]);
                     [a1, a2]
                 })
             })
@@ -47,11 +55,68 @@ impl Map {
             .unique()
     }
 
+    fn get_antinodes(&self) -> impl Iterator<Item = Coordinate> + use<'_> {
+        self.antennas
+            .values()
+            .flat_map(|antennas| {
+                antennas.iter().permutations(2).flat_map(|coordinates| {
+                    self.get_antinodes_for_coordinate(*coordinates[0], *coordinates[1])
+                })
+            })
+            .filter(|coordinate| !self.is_out_of_bounds(*coordinate))
+            .unique()
+    }
+
+    fn get_antinodes_for_coordinate(
+        &self,
+        c1: Coordinate,
+        c2: Coordinate,
+    ) -> impl Iterator<Item = Coordinate> {
+        // n == height should be wide enough to cover the entire map
+        (0..self.height).flat_map(move |n| {
+            let antinode1 = c1 + (c1 - c2) * n as i32;
+            let antinode2 = c2 + (c2 - c1) * n as i32;
+            [antinode1, antinode2]
+        })
+    }
+
     fn is_out_of_bounds(&self, coordinate: Coordinate) -> bool {
         coordinate.0.is_negative()
             || coordinate.1.is_negative()
             || coordinate.0 as usize >= self.width
             || coordinate.1 as usize >= self.height
+    }
+}
+
+impl Display for Map {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let antinodes: Vec<_> = self.get_antinodes().collect();
+
+        let map = (0..self.height)
+            .map(|y| {
+                (0..self.width)
+                    .map(|x| {
+                        let (x, y) = (x as i32, y as i32);
+
+                        if antinodes.contains(&Coordinate(x, y)) {
+                            return '#';
+                        }
+
+                        let antenna = self
+                            .antennas
+                            .iter()
+                            .find(|(_, positions)| positions.contains(&Coordinate(x, y)));
+
+                        if let Some(antenna) = antenna {
+                            *antenna.0
+                        } else {
+                            '.'
+                        }
+                    })
+                    .collect::<String>()
+            })
+            .join("\n");
+        write!(f, "{map}")
     }
 }
 
@@ -78,7 +143,7 @@ fn parse_map(map: &str) -> Map {
     }
 }
 
-fn get_antinodes(c1: Coordinate, c2: Coordinate) -> (Coordinate, Coordinate) {
+fn get_first_antinodes(c1: Coordinate, c2: Coordinate) -> (Coordinate, Coordinate) {
     let antinode1 = c1 + (c1 - c2);
     let antinode2 = c2 + (c2 - c1);
     (antinode1, antinode2)
@@ -87,7 +152,8 @@ fn get_antinodes(c1: Coordinate, c2: Coordinate) -> (Coordinate, Coordinate) {
 fn main() {
     let data = include_str!("../../data/day8");
 
-    println!("Part 1: {}", parse_map(data).get_antinodes().count());
+    println!("Part 1: {}", parse_map(data).get_first_antinodes().count());
+    println!("Part 2: {}", parse_map(data).get_antinodes().count());
 }
 
 #[cfg(test)]
@@ -137,16 +203,16 @@ mod tests {
     }
 
     #[test]
-    fn gets_antinodes() {
+    fn gets_first_antinodes() {
         let antenna1 = Coordinate(4, 3);
         let antenna2 = Coordinate(5, 5);
 
         let expected_antinodes = (Coordinate(3, 1), Coordinate(6, 7));
-        assert_eq!(expected_antinodes, get_antinodes(antenna1, antenna2))
+        assert_eq!(expected_antinodes, get_first_antinodes(antenna1, antenna2))
     }
 
     #[test]
-    fn gets_antinodes_from_map() {
+    fn gets_first_antinodes_from_map() {
         let map = indoc! {"
             ..........
             ..........
@@ -165,13 +231,13 @@ mod tests {
             .into_iter()
             .sorted()
             .collect();
-        let antinodes = map.get_antinodes().sorted().collect::<Vec<_>>();
+        let antinodes = map.get_first_antinodes().sorted().collect::<Vec<_>>();
 
         assert_eq!(expected_antinodes, antinodes)
     }
 
     #[test]
-    fn counts_antinodes() {
+    fn counts_first_antinodes() {
         let map = indoc! {"
             ............
             ........0...
@@ -186,6 +252,25 @@ mod tests {
             ............
             ............
         "};
-        assert_eq!(14, parse_map(map).get_antinodes().count());
+        assert_eq!(14, parse_map(map).get_first_antinodes().count());
+    }
+
+    #[test]
+    fn gets_all_antinodes() {
+        let map = indoc! {"
+            T...........
+            ...T........
+            .T..........
+            ............
+            ............
+            ............
+            ............
+            ............
+            ............
+            ............
+        "};
+        let map = parse_map(map);
+
+        assert_eq!(9, map.get_antinodes().count());
     }
 }
