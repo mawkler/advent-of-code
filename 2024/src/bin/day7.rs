@@ -3,16 +3,22 @@ use std::iter;
 
 // Part 1
 pub fn sum_valid_equations(equations: &str) -> Number {
+    let operators = [Operator::Addition, Operator::Multiplication];
     parse_calibration_equations(equations)
-        .filter(|(expected, numbers)| equation_is_valid(numbers, *expected))
+        .filter(|(expected, numbers)| equation_is_valid(*expected, numbers, &operators))
         .map(|(result, _)| result)
         .sum()
 }
 
 // Part 2
 pub fn sum_valid_equations_with_concatenation(equations: &str) -> Number {
+    let operators = [
+        Operator::Addition,
+        Operator::Multiplication,
+        Operator::Concatenation,
+    ];
     parse_calibration_equations(equations)
-        .filter(|(expected, numbers)| equation_is_valid_with_concatenation(numbers, *expected))
+        .filter(|(expected, numbers)| equation_is_valid(*expected, numbers, &operators))
         .map(|(result, _)| result)
         .sum()
 }
@@ -48,7 +54,7 @@ impl Equation {
 
         tail.iter()
             .zip(self.operators)
-            .fold(*head, |acc, (n, operator)| operator.execute(acc, *n))
+            .fold(*head, |acc, (&n, operator)| operator.execute(acc, n))
     }
 }
 
@@ -57,9 +63,11 @@ fn parse_calibration_equations(
 ) -> impl Iterator<Item = (Number, Vec<Number>)> + use<'_> {
     equations.lines().map(|line| {
         let (expected, numbers) = line.split_once(": ").expect("Is correctly formatted");
+
+        let expected = expected.parse().expect("Is numeric");
         let numbers = parse_equation_numbers(numbers);
 
-        (expected.parse().expect("Is numeric"), numbers)
+        (expected, numbers)
     })
 }
 
@@ -70,51 +78,22 @@ fn parse_equation_numbers(equation: &str) -> Vec<Number> {
         .collect()
 }
 
-fn create_operator_permutations(length: usize) -> impl Iterator<Item = Vec<Operator>> {
-    const OPERATORS: [Operator; 2] = [Operator::Addition, Operator::Multiplication];
-    iter::repeat(OPERATORS.iter().cloned())
-        .take(length)
-        .multi_cartesian_product()
-}
-
-fn create_operator_permutations_with_concatenation(
-    length: usize,
-) -> impl Iterator<Item = Vec<Operator>> {
-    const OPERATORS: [Operator; 3] = [
-        Operator::Addition,
-        Operator::Multiplication,
-        Operator::Concatenation,
-    ];
-
-    iter::repeat(OPERATORS.iter().cloned())
-        .take(length)
-        .multi_cartesian_product()
-}
-
-fn equation_is_valid(numbers: &[Number], expected: Number) -> bool {
-    create_operator_permutations(numbers.len() - 1)
-        .filter(move |operators| equation_has_expected_output(numbers, operators, expected))
-        .count()
-        > 0
-}
-
-fn equation_is_valid_with_concatenation(numbers: &[Number], expected: Number) -> bool {
-    create_operator_permutations_with_concatenation(numbers.len() - 1)
-        .filter(move |operators| equation_has_expected_output(numbers, operators, expected))
-        .count()
-        > 0
-}
-
-fn equation_has_expected_output(
-    numbers: &[Number],
+fn create_operator_permutations(
     operators: &[Operator],
-    expected: Number,
-) -> bool {
-    let numbers = numbers.to_vec();
-    let operators = operators.to_vec();
-    let result = Equation { numbers, operators }.evaluate();
+    length: usize,
+) -> impl Iterator<Item = Vec<Operator>> + use<'_> {
+    iter::repeat(operators.iter().cloned())
+        .take(length)
+        .multi_cartesian_product()
+}
 
-    result == expected
+fn equation_is_valid(expected: Number, numbers: &[Number], operators: &[Operator]) -> bool {
+    create_operator_permutations(operators, numbers.len() - 1).any(|operators| {
+        let numbers = numbers.to_vec();
+        let operators = operators.to_vec();
+
+        Equation { numbers, operators }.evaluate() == expected
+    })
 }
 
 fn main() {
@@ -150,7 +129,8 @@ mod tests {
 
     #[test]
     fn generates_operator_permutations() {
-        let permutations: Vec<_> = create_operator_permutations(2).collect();
+        let operators = [Operator::Addition, Operator::Multiplication];
+        let permutations: Vec<_> = create_operator_permutations(&operators, 2).collect();
 
         let expected = vec![
             vec![Operator::Addition, Operator::Addition],
