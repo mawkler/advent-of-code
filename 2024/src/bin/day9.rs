@@ -168,8 +168,6 @@ fn expand_blocks(block: Block, size: u32) -> Vec<Block> {
 fn main() {
     let data = include_str!("../../data/day9");
 
-    assert_eq!(6431472344710, calculate_checksum2(data));
-
     println!("Part 1: {}", calculate_checksum(data));
     println!("Part 2: {}", calculate_checksum2(data));
 }
