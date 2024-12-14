@@ -5,6 +5,59 @@ struct Map(String);
 type Coordinate = (i32, i32);
 type Trailhead = Vec<Coordinate>;
 
+// Part 1
+pub fn sum_trailhead_scores(map: &str) -> usize {
+    let map = Map(map.to_string());
+    let height = map.0.len();
+    let width = map.0.lines().next().expect("Has lines").len();
+
+    (0..height)
+        .map(|y| {
+            (0..width)
+                .map(|x| {
+                    let (x, y) = (x.try_into().unwrap(), y.try_into().unwrap());
+                    let Some(current_tile) = map.get_tile((x, y)) else {
+                        return 0;
+                    };
+
+                    if current_tile != 0 {
+                        return 0;
+                    }
+
+                    map.get_unique_trailheads((x, y)).count()
+                })
+                .sum::<usize>()
+        })
+        .sum()
+}
+
+// Part 2
+pub fn sum_trailhead_ratings(map: &str) -> usize {
+    let map = Map(map.to_string());
+    let height = map.0.len();
+    let width = map.0.lines().next().expect("Has lines").len();
+
+    (0..height)
+        .map(|y| {
+            (0..width)
+                .map(|x| {
+                    let (x, y) = (x.try_into().unwrap(), y.try_into().unwrap());
+                    let Some(current_tile) = map.get_tile((x, y)) else {
+                        return 0;
+                    };
+
+                    if current_tile != 0 {
+                        return 0;
+                    }
+
+                    // The only difference to Part 1 is that we don't filter here
+                    map.get_trailheads((x, y)).len()
+                })
+                .sum::<usize>()
+        })
+        .sum()
+}
+
 impl Map {
     fn get_tile(&self, (x, y): Coordinate) -> Option<usize> {
         let tile = self.0.lines().nth(y as usize)?.chars().nth(x as usize);
@@ -51,35 +104,11 @@ impl Map {
     }
 }
 
-pub fn sum_trailhead_scores(map: &str) -> usize {
-    let map = Map(map.to_string());
-    let height = map.0.len();
-    let width = map.0.lines().next().expect("Has lines").len();
-
-    (0..height)
-        .map(|y| {
-            (0..width)
-                .map(|x| {
-                    let (x, y) = (x.try_into().unwrap(), y.try_into().unwrap());
-                    let Some(current_tile) = map.get_tile((x, y)) else {
-                        return 0;
-                    };
-
-                    if current_tile != 0 {
-                        return 0;
-                    }
-
-                    map.get_unique_trailheads((x, y)).count()
-                })
-                .sum::<usize>()
-        })
-        .sum()
-}
-
 fn main() {
     let data = include_str!("../../data/day10");
 
     println!("Part 1: {}", sum_trailhead_scores(data));
+    println!("Part 2: {}", sum_trailhead_ratings(data));
 }
 
 #[cfg(test)]
@@ -230,5 +259,32 @@ mod tests {
         "};
 
         assert_eq!(36, sum_trailhead_scores(map))
+    }
+
+    #[test]
+    fn sums_trailhead_ratings_test() {
+        let map = indoc! {"
+            .....0.
+            ..4321.
+            ..5..2.
+            ..6543.
+            ..7..4.
+            ..8765.
+            ..9....
+        "};
+
+        assert_eq!(3, sum_trailhead_ratings(map));
+
+        let map = indoc! {"
+            ..90..9
+            ...1.98
+            ...2..7
+            6543456
+            765.987
+            876....
+            987....
+        "};
+
+        assert_eq!(13, sum_trailhead_ratings(map));
     }
 }
