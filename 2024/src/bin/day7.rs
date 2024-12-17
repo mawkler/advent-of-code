@@ -19,11 +19,11 @@ pub fn sum_valid_equations_with_concatenation(equations: &str) -> Number {
     ];
     parse_calibration_equations(equations)
         .filter(|(expected, numbers)| equation_is_valid(*expected, numbers, &operators))
-        .map(|(result, _)| result)
+        .map(|(expected, _)| expected)
         .sum()
 }
 
-type Number = i64;
+type Number = u64;
 
 #[derive(Clone, Debug, PartialEq)]
 enum Operator {
@@ -32,7 +32,8 @@ enum Operator {
     Concatenation,
 }
 
-struct Equation {
+// RHS of an equation
+struct Expression {
     numbers: Vec<Number>,
     operators: Vec<Operator>,
 }
@@ -47,14 +48,22 @@ impl Operator {
     }
 }
 
-impl Equation {
-    fn evaluate(self) -> Number {
+impl Expression {
+    fn evaluate(&self) -> Number {
         let (head, tail) = self.numbers.split_at(1);
         let head = head.first().expect("Always has a head");
 
         tail.iter()
-            .zip(self.operators)
-            .fold(*head, |acc, (&n, operator)| operator.execute(acc, n))
+            .zip(self.operators.clone())
+            .fold(*head, |acc, (&number, operator)| {
+                operator.execute(acc, number)
+            })
+    }
+}
+
+impl PartialEq<Number> for Expression {
+    fn eq(&self, number: &Number) -> bool {
+        self.evaluate() == *number
     }
 }
 
@@ -65,26 +74,13 @@ fn parse_calibration_equations(
         let (expected, numbers) = line.split_once(": ").expect("Is correctly formatted");
 
         let expected = expected.parse().expect("Is numeric");
-        let numbers = parse_equation_numbers(numbers);
+        let numbers = numbers
+            .split(" ")
+            .map(|n| n.parse().expect("Is numeric"))
+            .collect();
 
         (expected, numbers)
     })
-}
-
-fn parse_equation_numbers(equation: &str) -> Vec<Number> {
-    equation
-        .split(" ")
-        .map(|n| n.parse().expect("Equation must contain only numbers"))
-        .collect()
-}
-
-fn create_operator_permutations(
-    operators: &[Operator],
-    length: usize,
-) -> impl Iterator<Item = Vec<Operator>> + use<'_> {
-    iter::repeat(operators.iter().cloned())
-        .take(length)
-        .multi_cartesian_product()
 }
 
 fn equation_is_valid(expected: Number, numbers: &[Number], operators: &[Operator]) -> bool {
@@ -92,8 +88,15 @@ fn equation_is_valid(expected: Number, numbers: &[Number], operators: &[Operator
         let numbers = numbers.to_vec();
         let operators = operators.to_vec();
 
-        Equation { numbers, operators }.evaluate() == expected
+        Expression { numbers, operators } == expected
     })
+}
+
+fn create_operator_permutations(
+    operators: &[Operator],
+    length: usize,
+) -> impl Iterator<Item = Vec<Operator>> + use<'_> {
+    iter::repeat_n(operators.iter().cloned(), length).multi_cartesian_product()
 }
 
 fn main() {
@@ -110,21 +113,12 @@ mod tests {
     use itertools::assert_equal;
 
     #[test]
-    fn parses_equation() {
-        let equation = "81 40 27";
-        let equation = parse_equation_numbers(equation);
-
-        assert_equal(equation, vec![81, 40, 27]);
-    }
-
-    #[test]
-    fn evaluates_equation() {
-        let equation = "81 40 27";
+    fn evaluates_expression() {
         let operators = vec![Operator::Addition, Operator::Multiplication];
-        let numbers = parse_equation_numbers(equation);
-        let equation = Equation { numbers, operators };
+        let numbers = vec![81, 40, 27];
+        let expression = Expression { numbers, operators };
 
-        assert_eq!(equation.evaluate(), 3267);
+        assert_eq!(expression.evaluate(), 3267);
     }
 
     #[test]
