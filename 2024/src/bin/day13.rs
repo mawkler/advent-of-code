@@ -5,14 +5,30 @@ use std::{
     ops::Add,
 };
 
+// Part 1
 fn find_fewest_tokens(machines: &str) -> usize {
     parse_machines(machines)
         .flat_map(|machine| machine.fewest_prize_tokens())
         .sum()
 }
 
+// Part 2 (linear algebra goes brrrrrrrrrrrrrrr)
+fn find_fewest_tokens_with_conversion_fixed(machines: &str) -> usize {
+    parse_machines(machines)
+        .map(|machine| {
+            let Vector(x, y) = machine.prize;
+
+            let conversion = 10000000000000;
+            let prize = Vector(x + conversion, y + conversion);
+            let machine = Machine::new(machine.button_a, machine.button_b, prize);
+
+            machine.find_prize_with_conversion()
+        })
+        .sum()
+}
+
 #[derive(PartialEq, Eq, Debug, Clone, Copy, Hash)]
-struct Vector(u32, u32);
+struct Vector(i64, i64);
 
 #[derive(PartialEq, Eq, Debug, Clone)]
 struct Machine {
@@ -125,6 +141,38 @@ impl Machine {
 
         button_presses
     }
+
+    fn find_prize_with_conversion(&self) -> usize {
+        let Some(Vector(a, b)) = self.solve() else {
+            return 0;
+        };
+
+        let (a, b) = (a as usize, b as usize);
+        3 * a + b
+    }
+
+    fn solve(&self) -> Option<Vector> {
+        // Cramer's rule
+        let a = self.button_a.0;
+        let b = self.button_b.0;
+        let c = self.button_a.1;
+        let d = self.button_b.1;
+        let e = self.prize.0;
+        let f = self.prize.1;
+
+        let (x, x_remainder) = divide_with_remainder(e * d - b * f, a * d - b * c);
+        let (y, y_remainder) = divide_with_remainder(a * f - e * c, a * d - b * c);
+
+        if x_remainder != 0 || y_remainder != 0 {
+            return None;
+        }
+
+        Some(Vector(x, y))
+    }
+}
+
+fn divide_with_remainder(numerator: i64, denominator: i64) -> (i64, i64) {
+    (numerator / denominator, numerator % denominator)
 }
 
 fn parse_machines(machines: &str) -> impl Iterator<Item = Machine> + use<'_> {
@@ -154,6 +202,7 @@ fn main() {
     let data = include_str!("../../data/day13");
 
     println!("Part 1: {}", find_fewest_tokens(data));
+    println!("Part 2: {}", find_fewest_tokens_with_conversion_fixed(data));
 }
 
 #[cfg(test)]
@@ -204,5 +253,29 @@ mod tests {
         "};
 
         assert_eq!(Some(280), parse_machine(machine).fewest_prize_tokens());
+    }
+
+    #[test]
+    fn solves_equation() {
+        let machine = indoc! {"
+            Button A: X+17, Y+86
+            Button B: X+84, Y+37
+            Prize: X=7870, Y=6450
+        "};
+        let machine = parse_machine(machine);
+
+        assert_eq!(Some(Vector(38, 86,)), machine.solve())
+    }
+
+    #[test]
+    fn finds_fewest_tokens_with_conversion_fixed() {
+        let machine = indoc! {"
+            Button A: X+26, Y+66
+            Button B: X+67, Y+21
+            Prize: X=10000000012748, Y=10000000012176
+        "};
+
+        let prize = parse_machine(machine).find_prize_with_conversion();
+        assert_eq!(459236326669, prize);
     }
 }
