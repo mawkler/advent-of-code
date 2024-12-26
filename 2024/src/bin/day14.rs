@@ -17,6 +17,22 @@ fn safety_factor_after_100_seconds(map: &str) -> usize {
     map.calculate_safety_factor()
 }
 
+// Part 2
+fn find_christmas_tree(map: &str) -> usize {
+    let mut map = Map::new(map, 101, 103);
+    let mut count = 0;
+
+    loop {
+        map.update(1);
+        count += 1;
+
+        if map.has_christmas_tree() {
+            println!("{map}");
+            return count;
+        }
+    }
+}
+
 #[derive(Debug)]
 struct Map {
     robots: Vec<Robot>,
@@ -88,6 +104,29 @@ impl Map {
             .reduce(|acc, q| acc * q)
             .unwrap()
     }
+
+    fn has_christmas_tree(&self) -> bool {
+        (0..self.height).step_by(3).any(|y| {
+            (0..self.width)
+                .step_by(2)
+                .any(|x| self.is_christmas_tree(x, y))
+        })
+    }
+
+    fn is_christmas_tree(&self, x: i32, y: i32) -> bool {
+        [
+            (x, y),
+            (x + 1, y),
+            (x, y + 1),
+            (x + 1, y + 1),
+            (x, y + 2),
+            (x + 1, y + 2),
+            (x, y + 3),
+            (x + 1, y + 3),
+        ]
+        .iter()
+        .all(|(x, y)| self.count_robots(*x, *y) > 0)
+    }
 }
 
 fn iter_quadrant(
@@ -146,6 +185,7 @@ fn parse_robot(i: &str) -> nom::IResult<&str, (Vector, Vector)> {
 fn main() {
     let data = include_str!("../../data/day14");
     println!("Part 1: {}", safety_factor_after_100_seconds(data));
+    println!("Part 2: {}", find_christmas_tree(data));
 }
 
 #[cfg(test)]
