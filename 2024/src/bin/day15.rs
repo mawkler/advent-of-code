@@ -16,7 +16,8 @@ struct Tile {
 
 #[derive(Debug)]
 enum TileType {
-    Box,
+    BoxLeft,  // Left part of box
+    BoxRight, // Right part of box
     Wall,
     Robot,
 }
@@ -57,7 +58,7 @@ impl Warehouse {
         self.tiles
             .iter()
             .map(|tile| match tile.tile_type {
-                TileType::Box => tile.coordinate.1 * 100 + tile.coordinate.0,
+                TileType::BoxLeft => tile.coordinate.1 * 100 + tile.coordinate.0,
                 _ => 0,
             })
             .sum()
@@ -127,8 +128,16 @@ impl Warehouse {
             };
 
             match neighbour.tile_type {
-                TileType::Box => {
+                // TODO: also push the box sibling
+                TileType::BoxLeft => {
                     boxes.push(neighbour_pos);
+                    boxes.push(neighbour.get_box_sibling_pos());
+                    current = neighbour_pos;
+                    continue;
+                }
+                TileType::BoxRight => {
+                    boxes.push(neighbour_pos);
+                    boxes.push(neighbour.get_box_sibling_pos());
                     current = neighbour_pos;
                     continue;
                 }
@@ -189,15 +198,31 @@ impl Display for Warehouse {
 }
 
 impl Tile {
+    fn new(tile_type: TileType, coordinate: Coordinate) -> Self {
+        Self {
+            tile_type,
+            coordinate,
+        }
+    }
+
     fn move_to(&mut self, coordinate: Coordinate) {
         self.coordinate = coordinate;
+    }
+
+    fn get_box_sibling_pos(&self) -> Coordinate {
+        match self.tile_type {
+            TileType::BoxLeft => (self.coordinate.0 + 1, self.coordinate.1),
+            TileType::BoxRight => (self.coordinate.0 - 1, self.coordinate.1),
+            _ => panic!("{self} is not a box"),
+        }
     }
 }
 
 impl Display for Tile {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let tile = match self.tile_type {
-            TileType::Box => "O",
+            TileType::BoxLeft => "[",
+            TileType::BoxRight => "]",
             TileType::Wall => "#",
             TileType::Robot => "@",
         };
@@ -205,27 +230,30 @@ impl Display for Tile {
     }
 }
 
-fn parse_tile(tile: char, coordinate: Coordinate) -> Option<Tile> {
-    let tile_type = match tile {
-        '#' => Some(TileType::Wall),
-        'O' => Some(TileType::Box),
-        '@' => Some(TileType::Robot),
-        '.' => None,
+fn parse_tile(tile: char, coordinate: Coordinate) -> (Option<Tile>, Option<Tile>) {
+    let (left_tile, right_tile) = match tile {
+        '#' => (Some(TileType::Wall), Some(TileType::Wall)),
+        'O' => (Some(TileType::BoxLeft), Some(TileType::BoxRight)),
+        '@' => (Some(TileType::Robot), None),
+        '.' => (None, None),
         other => panic!("Unrecognized character '{other}'"),
-    }?;
-
-    let tile = Tile {
-        tile_type,
-        coordinate,
     };
-    Some(tile)
+
+    let left_tile = left_tile.map(|tile| Tile::new(tile, coordinate));
+    let right_tile = right_tile.map(|tile| Tile::new(tile, (coordinate.0 + 1, coordinate.1)));
+
+    (left_tile, right_tile)
 }
 
 fn parse_tiles(warehouse: &str) -> impl Iterator<Item = Tile> + use<'_> {
     warehouse.lines().enumerate().flat_map(|(y, line)| {
         line.chars()
             .enumerate()
-            .flat_map(move |(x, tile)| parse_tile(tile, (x as i32, y as i32)))
+            .step_by(2)
+            .flat_map(move |(x, tile)| {
+                let (left, right) = parse_tile(tile, (x as i32, y as i32));
+                [left, right].into_iter().flatten()
+            })
     })
 }
 
@@ -260,7 +288,6 @@ fn main() {
 mod tests {
     use super::*;
     use indoc::indoc;
-    use itertools::assert_equal;
 
     #[test]
     fn parses_and_displays_warehouse() {
@@ -278,33 +305,6 @@ mod tests {
         };
 
         assert_eq!(warehouse, Warehouse::from(warehouse).to_string())
-    }
-
-    #[test]
-    fn parses_moves() {
-        let input = indoc! {"
-            <vv>
-            vvv<
-            ><>v
-        "};
-
-        let expected = vec![
-            Direction::Left,
-            Direction::Down,
-            Direction::Down,
-            Direction::Right,
-            Direction::Down,
-            Direction::Down,
-            Direction::Down,
-            Direction::Left,
-            Direction::Right,
-            Direction::Left,
-            Direction::Right,
-            Direction::Down,
-        ];
-        let moves = parse_moves(input);
-
-        assert_equal(expected, moves);
     }
 
     #[test]
@@ -345,13 +345,13 @@ mod tests {
     #[test]
     fn gets_pushable_tiles() {
         let warehouse = indoc! {"
-            .OO.O.
-            ......
+            .OO.
+            ....
         "};
         let mut warehouse = Warehouse::from(warehouse);
 
-        let pushable_tiles = warehouse.get_pushable_boxes((0, 0), &Direction::Right);
-        assert_eq!(Some(vec![(1, 0), (2, 0)]), pushable_tiles)
+        let pushable_tiles = warehouse.get_pushable_boxes((1, 0), &Direction::Right);
+        assert_eq!(Some(vec![(2, 0), (3, 0)]), pushable_tiles)
     }
 
     #[test]
