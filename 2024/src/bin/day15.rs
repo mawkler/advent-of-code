@@ -41,7 +41,7 @@ impl Debug for Tile {
 }
 
 impl Direction {
-    fn get_neighbour(&self, (x, y): Coordinate) -> Coordinate {
+    fn get_neighbour_pos(&self, (x, y): Coordinate) -> Coordinate {
         match self {
             Direction::Up => (x, y - 1),
             Direction::Right => (x + 1, y),
@@ -119,13 +119,13 @@ impl Warehouse {
             return;
         }
 
-        let neighbour = direction.get_neighbour(robot);
+        let neighbour = direction.get_neighbour_pos(robot);
         *self.get_robot_mut() = neighbour;
     }
 
     /// Returns true if tiles were pushable, otherwise false
     fn push_boxes(&mut self, from: Coordinate, direction: &Direction) -> bool {
-        let Some(boxes) = self.get_pushable_boxes(from, direction) else {
+        let Some(boxes) = self.get_pushable_boxes_aux(from, direction, HashSet::new()) else {
             // Boxes aren't pushable
             return false;
         };
@@ -138,28 +138,37 @@ impl Warehouse {
         &self,
         from: Coordinate,
         direction: &Direction,
+    ) -> Option<HashSet<(i32, i32)>> {
+        self.get_pushable_boxes_aux(from, direction, HashSet::new())
+    }
+
+    fn get_pushable_boxes_aux(
+        &self,
+        from: Coordinate,
+        direction: &Direction,
+        mut boxes: HashSet<Coordinate>,
     ) -> Option<HashSet<Coordinate>> {
-        let mut boxes = HashSet::new();
-        let mut current = from;
+        let neighbour_pos = direction.get_neighbour_pos(from);
 
-        loop {
-            let neighbour_pos = direction.get_neighbour(current);
+        let Some(neighbour) = self.get_tile(neighbour_pos) else {
+            return Some(boxes);
+        };
 
-            let Some(neighbour) = self.get_tile(neighbour_pos) else {
-                return Some(boxes);
-            };
+        let neighbour_sibling_pos = neighbour.get_box_sibling_pos();
 
-            match neighbour.tile_type {
-                TileType::BoxLeft | TileType::BoxRight => {
-                    boxes.insert(neighbour_pos);
-                    boxes.insert(neighbour.get_box_sibling_pos());
-                    current = neighbour_pos + direction;
-                    continue;
-                }
-                TileType::Wall => return None,
-                TileType::Robot => {
-                    unreachable!("There is only one robot, it can't have a robot neighbour")
-                }
+        match neighbour.tile_type {
+            TileType::BoxLeft | TileType::BoxRight => {
+                boxes.insert(neighbour_pos);
+                boxes.insert(neighbour_sibling_pos);
+                self.get_pushable_boxes_aux(neighbour_pos, direction, boxes)
+                    .and_then(|boxes| {
+                        // TODO: we keep checking siblings back and forth when it's horizontal
+                        self.get_pushable_boxes_aux(neighbour_sibling_pos, direction, boxes)
+                    })
+            }
+            TileType::Wall => None,
+            TileType::Robot => {
+                unreachable!("There is only one robot, it can't have a robot neighbour")
             }
         }
     }
@@ -167,12 +176,12 @@ impl Warehouse {
     fn move_tiles(&mut self, coordinates: &[Coordinate], direction: &Direction) {
         for coordinate in coordinates {
             let tile = self.get_tile_mut(*coordinate).unwrap();
-            tile.coordinate = direction.get_neighbour(tile.coordinate)
+            tile.coordinate = direction.get_neighbour_pos(tile.coordinate)
         }
     }
 
     fn move_tile(&mut self, tile: Coordinate, direction: Direction) {
-        let new_position = direction.get_neighbour(tile);
+        let new_position = direction.get_neighbour_pos(tile);
         let tile = self.get_tile_mut(tile).unwrap();
 
         tile.move_to(new_position);
@@ -185,7 +194,6 @@ impl From<&str> for Warehouse {
         let height = lines.clone().count();
 
         let tiles = parse_tiles(warehouse).collect();
-        // println!("{:?}", &tiles);
 
         Self {
             tiles,
@@ -305,6 +313,38 @@ mod tests {
     use indoc::indoc;
     use itertools::assert_equal;
 
+    impl Warehouse {
+        fn parse_parsed_tile(tile: char, coordinate: Coordinate) -> std::option::Option<Tile> {
+            let tile = match tile {
+                '#' => Some(TileType::Wall),
+                '[' => Some(TileType::BoxLeft),
+                ']' => Some(TileType::BoxRight),
+                '@' => Some(TileType::Robot),
+                '.' => None,
+                other => panic!("Unrecognized character '{other}'"),
+            };
+
+            tile.map(|tile| Tile::new(tile, coordinate))
+        }
+
+        fn from_parsed(warehouse: &str) -> Self {
+            let tiles = warehouse.lines().enumerate().flat_map(|(y, line)| {
+                line.chars().enumerate().flat_map(move |(x, tile)| {
+                    Warehouse::parse_parsed_tile(tile, (x as i32, y as i32))
+                })
+            });
+
+            let lines = warehouse.lines();
+            let height = lines.clone().count();
+
+            Self {
+                tiles: tiles.collect(),
+                width: warehouse.lines().nth(0).unwrap().len(),
+                height,
+            }
+        }
+    }
+
     #[test]
     fn parses_tiles() {
         let warehouse = indoc! {"
@@ -402,15 +442,90 @@ mod tests {
 
     #[test]
     fn gets_pushable_tiles() {
-        let warehouse = indoc! {"
-            .OO.
-            ....
-        "};
-        let warehouse = Warehouse::from(warehouse);
+        let warehouse = Warehouse::from_parsed(indoc! {"
+            ..[][]..
+            ........
+        "});
 
         let pushable_tiles = warehouse.get_pushable_boxes((1, 0), &Direction::Right);
         assert_eq!(
             HashSet::from([(2, 0), (3, 0), (4, 0), (5, 0)]),
+            pushable_tiles.unwrap(),
+        );
+    }
+
+    #[test]
+    fn gets_pushable_tiles_upwards() {
+        let warehouse = indoc! {"
+            []
+            []
+            ..
+        "};
+        let warehouse = Warehouse::from_parsed(warehouse);
+
+        let pushable_tiles = warehouse.get_pushable_boxes((1, 2), &Direction::Up);
+        assert_eq!(
+            HashSet::from([(0, 0), (1, 0), (0, 1), (1, 1)]),
+            pushable_tiles.unwrap(),
+        );
+    }
+
+    #[test]
+    fn gets_pushable_diagonal_tiles() {
+        let warehouse = indoc! {"
+            .[]
+            [].
+            ...
+        "};
+        let warehouse = Warehouse::from_parsed(warehouse);
+
+        let pushable_tiles = warehouse.get_pushable_boxes((0, 2), &Direction::Up);
+        assert_eq!(
+            HashSet::from([(0, 1), (1, 1), (1, 0), (2, 0)]),
+            pushable_tiles.unwrap(),
+        );
+    }
+
+    #[test]
+    fn gets_pushable_diagonal_tiles_longer() {
+        let warehouse = indoc! {"
+            [][]
+            .[].
+            ....
+        "};
+        let warehouse = Warehouse::from_parsed(warehouse);
+
+        let pushable_tiles = warehouse.get_pushable_boxes((1, 2), &Direction::Up);
+        assert_eq!(
+            HashSet::from([(0, 0), (1, 0), (2, 0), (3, 0), (1, 1), (2, 1)]),
+            pushable_tiles.unwrap(),
+        );
+    }
+
+    #[test]
+    fn gets_pushable_diagonal_tiles_longest() {
+        let warehouse = indoc! {"
+            []..[]
+            .[][].
+            ..[]..
+            ......
+        "};
+        let warehouse = Warehouse::from_parsed(warehouse);
+
+        let pushable_tiles = warehouse.get_pushable_boxes((3, 3), &Direction::Up);
+        assert_eq!(
+            HashSet::from([
+                (0, 0),
+                (1, 0),
+                (4, 0),
+                (5, 0),
+                (1, 1),
+                (2, 1),
+                (3, 1),
+                (4, 1),
+                (2, 2),
+                (3, 2)
+            ]),
             pushable_tiles.unwrap(),
         );
     }
@@ -437,7 +552,7 @@ mod tests {
             ....
             .O..
         "};
-        let mut warehouse = Warehouse::from(warehouse);
+        let warehouse = Warehouse::from(warehouse);
         println!("{}", &warehouse);
 
         warehouse.move_robot(&Direction::Down);
