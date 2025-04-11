@@ -1,5 +1,8 @@
 use itertools::Itertools;
-use std::fmt::Display;
+use std::{
+    collections::HashSet,
+    fmt::{Debug, Display},
+};
 
 type Coordinate = (i32, i32);
 
@@ -9,12 +12,13 @@ struct Warehouse {
     height: usize,
 }
 
+#[derive(/* Debug,  */ PartialEq)]
 struct Tile {
     tile_type: TileType,
     coordinate: Coordinate,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 enum TileType {
     BoxLeft,  // Left part of box
     BoxRight, // Right part of box
@@ -30,6 +34,12 @@ enum Direction {
     Left,
 }
 
+impl Debug for Tile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}: {:?}", self.tile_type, self.coordinate)
+    }
+}
+
 impl Direction {
     fn get_neighbour(&self, (x, y): Coordinate) -> Coordinate {
         match self {
@@ -37,6 +47,19 @@ impl Direction {
             Direction::Right => (x + 1, y),
             Direction::Down => (x, y + 1),
             Direction::Left => (x - 1, y),
+        }
+    }
+}
+
+impl std::ops::Add<&Direction> for Coordinate {
+    type Output = Coordinate;
+
+    fn add(self, direction: &Direction) -> Coordinate {
+        match direction {
+            Direction::Up => (self.0, self.1 - 1),
+            Direction::Down => (self.0, self.1 + 1),
+            Direction::Left => (self.0 - 1, self.1),
+            Direction::Right => (self.0 + 1, self.1),
         }
     }
 }
@@ -107,19 +130,18 @@ impl Warehouse {
             return false;
         };
 
-        self.move_tiles(&boxes, direction);
+        self.move_tiles(&boxes.into_iter().collect_vec(), direction);
         true
     }
 
     fn get_pushable_boxes(
-        &mut self,
+        &self,
         from: Coordinate,
         direction: &Direction,
-    ) -> Option<Vec<Coordinate>> {
-        let mut boxes = vec![];
+    ) -> Option<HashSet<Coordinate>> {
+        let mut boxes = HashSet::new();
         let mut current = from;
 
-        // TODO: can we make this less imperative and more functional?
         loop {
             let neighbour_pos = direction.get_neighbour(current);
 
@@ -128,17 +150,10 @@ impl Warehouse {
             };
 
             match neighbour.tile_type {
-                // TODO: also push the box sibling
-                TileType::BoxLeft => {
-                    boxes.push(neighbour_pos);
-                    boxes.push(neighbour.get_box_sibling_pos());
-                    current = neighbour_pos;
-                    continue;
-                }
-                TileType::BoxRight => {
-                    boxes.push(neighbour_pos);
-                    boxes.push(neighbour.get_box_sibling_pos());
-                    current = neighbour_pos;
+                TileType::BoxLeft | TileType::BoxRight => {
+                    boxes.insert(neighbour_pos);
+                    boxes.insert(neighbour.get_box_sibling_pos());
+                    current = neighbour_pos + direction;
                     continue;
                 }
                 TileType::Wall => return None,
@@ -169,8 +184,11 @@ impl From<&str> for Warehouse {
         let mut lines = warehouse.lines();
         let height = lines.clone().count();
 
+        let tiles = parse_tiles(warehouse).collect();
+        // println!("{:?}", &tiles);
+
         Self {
-            tiles: parse_tiles(warehouse).collect(),
+            tiles,
             width: lines.nth(0).unwrap().len(),
             height,
         }
@@ -247,13 +265,10 @@ fn parse_tile(tile: char, coordinate: Coordinate) -> (Option<Tile>, Option<Tile>
 
 fn parse_tiles(warehouse: &str) -> impl Iterator<Item = Tile> + use<'_> {
     warehouse.lines().enumerate().flat_map(|(y, line)| {
-        line.chars()
-            .enumerate()
-            .step_by(2)
-            .flat_map(move |(x, tile)| {
-                let (left, right) = parse_tile(tile, (x as i32, y as i32));
-                [left, right].into_iter().flatten()
-            })
+        line.chars().enumerate().flat_map(move |(x, tile)| {
+            let (left, right) = parse_tile(tile, (x as i32 * 2, y as i32));
+            [left, right].into_iter().flatten()
+        })
     })
 }
 
@@ -288,6 +303,36 @@ fn main() {
 mod tests {
     use super::*;
     use indoc::indoc;
+    use itertools::assert_equal;
+
+    #[test]
+    fn parses_tiles() {
+        let warehouse = indoc! {"
+            .O.#
+        "};
+        let warehouse = parse_tiles(warehouse).collect_vec();
+
+        let expected = [
+            Tile {
+                tile_type: TileType::BoxLeft,
+                coordinate: (2, 0),
+            },
+            Tile {
+                tile_type: TileType::BoxRight,
+                coordinate: (3, 0),
+            },
+            Tile {
+                tile_type: TileType::Wall,
+                coordinate: (6, 0),
+            },
+            Tile {
+                tile_type: TileType::Wall,
+                coordinate: (7, 0),
+            },
+        ];
+
+        assert_equal(expected, warehouse)
+    }
 
     #[test]
     fn parses_and_displays_warehouse() {
@@ -304,7 +349,20 @@ mod tests {
             ##########"
         };
 
-        assert_eq!(warehouse, Warehouse::from(warehouse).to_string())
+        let expected_warehouse = indoc! {"
+            ####################
+            ##....[]....[]..[]##
+            ##............[]..##
+            ##..[][]....[]..[]##
+            ##....[]@.....[]..##
+            ##[]##....[]......##
+            ##[]....[]....[]..##
+            ##..[][]..[]..[][]##
+            ##........[]......##
+            ####################"
+        };
+        let warehouse = Warehouse::from(warehouse).to_string();
+        assert_eq!(expected_warehouse, warehouse)
     }
 
     #[test]
@@ -348,10 +406,13 @@ mod tests {
             .OO.
             ....
         "};
-        let mut warehouse = Warehouse::from(warehouse);
+        let warehouse = Warehouse::from(warehouse);
 
         let pushable_tiles = warehouse.get_pushable_boxes((1, 0), &Direction::Right);
-        assert_eq!(Some(vec![(2, 0), (3, 0)]), pushable_tiles)
+        assert_eq!(
+            HashSet::from([(2, 0), (3, 0), (4, 0), (5, 0)]),
+            pushable_tiles.unwrap(),
+        );
     }
 
     #[test]
@@ -360,7 +421,7 @@ mod tests {
             OOO#
             ....
         "};
-        let mut warehouse = Warehouse::from(warehouse);
+        let warehouse = Warehouse::from(warehouse);
 
         let pushable_tiles = warehouse.get_pushable_boxes((0, 0), &Direction::Right);
         assert_eq!(None, pushable_tiles)
@@ -377,16 +438,19 @@ mod tests {
             .O..
         "};
         let mut warehouse = Warehouse::from(warehouse);
+        println!("{}", &warehouse);
 
         warehouse.move_robot(&Direction::Down);
+        println!();
+        println!("{}", &warehouse);
 
         let expected = indoc! {"
-            ....
-            ....
-            .@..
-            .O..
-            .O..
-            .O.."
+            ........
+            ........
+            ..@.....
+            ..[]....
+            ..[]....
+            ..[]...."
         };
         assert_eq!(expected, warehouse.to_string());
     }
