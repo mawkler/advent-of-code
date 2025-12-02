@@ -47,11 +47,40 @@ fn count_zeroes(data: &str) -> u32 {
     zeroes
 }
 
+fn count_passed_zeroes(start_number: i16, clicks: i16) -> i16 {
+    let direction = clicks.signum(); // -1, 0, or 1
+
+    // Couldn't get the math to math so we just check all the positions lol
+    (1..=clicks.abs())
+        .map(|click| (start_number + click * direction).rem_euclid(DIAL_NUMBERS))
+        .filter(|&pos| pos == 0)
+        .count() as i16
+}
+
+fn count_any_zeroes(data: &str) -> u32 {
+    let rotations: Vec<_> = data.lines().map(parse_rotation).collect();
+
+    let (_, zeroes) = rotations
+        .iter()
+        .fold((50, 0), |(number, zeroes), &(direction, distance)| {
+            let clicks = direction as i16 * distance as i16;
+            let passed_zeroes = count_passed_zeroes(number, clicks);
+            let new_number = (number + clicks).rem_euclid(DIAL_NUMBERS);
+
+            (new_number, zeroes + passed_zeroes)
+        });
+
+    zeroes as u32
+}
+
 fn main() {
     let data = include_str!("../../data/day1");
 
     let zeroes = count_zeroes(data);
-    println!("Zeroes: {zeroes}")
+    println!("Part 1: {zeroes}");
+
+    let passed_zeroes = count_any_zeroes(data);
+    println!("Part 2: {passed_zeroes}");
 }
 
 #[cfg(test)]
@@ -79,5 +108,33 @@ R14
 L82";
 
         assert_eq!(count_zeroes(rotations), 3);
+    }
+
+    #[test]
+    fn counts_passed_zeroes() {
+        assert_eq!(count_passed_zeroes(50, 100), 1);
+        assert_eq!(count_passed_zeroes(50, 50), 1);
+        assert_eq!(count_passed_zeroes(0, 100), 1);
+        assert_eq!(count_passed_zeroes(1, 99), 1);
+        assert_eq!(count_passed_zeroes(1, 98), 0);
+        assert_eq!(count_passed_zeroes(1, -2), 1);
+        assert_eq!(count_passed_zeroes(0, -2), 1);
+        assert_eq!(count_passed_zeroes(3, -3), 1);
+    }
+
+    #[test]
+    fn counts_any_zeroes() {
+        let rotations = "L68
+L30
+R48
+L5
+R60
+L55
+L1
+L99
+R14
+L82";
+
+        assert_eq!(count_any_zeroes(rotations), 6);
     }
 }
