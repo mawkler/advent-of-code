@@ -74,12 +74,12 @@ fn count_any_zeroes(data: &str) -> u32 {
 }
 
 fn main() {
-    let data = include_str!("../../data/day1");
+    let input = include_str!("../../input/day1");
 
-    let zeroes = count_zeroes(data);
+    let zeroes = count_zeroes(input);
     println!("Part 1: {zeroes}");
 
-    let passed_zeroes = count_any_zeroes(data);
+    let passed_zeroes = count_any_zeroes(input);
     println!("Part 2: {passed_zeroes}");
 }
 
