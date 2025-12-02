@@ -1,3 +1,5 @@
+// I got part 1 working, part 2 i still a work in progress
+
 use itertools::Itertools;
 use std::{
     collections::HashSet,
