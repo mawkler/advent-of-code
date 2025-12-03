@@ -9,3 +9,4 @@ unused_variables = "allow"
 
 [dependencies]
 anyhow = "1.0.93"
+itertools = "0.14.0"
