@@ -1,7 +1,7 @@
 fn maximum_joltage(battery_bank: &str) -> u32 {
     (1..battery_bank.len())
-        .map(|i| {
-            let (left, right) = battery_bank.split_at(i);
+        .map(|pivot| {
+            let (left, right) = battery_bank.split_at(pivot);
             let left_number = left.chars().last().expect("string is long enough");
 
             right
