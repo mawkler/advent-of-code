@@ -76,17 +76,26 @@ impl From<&str> for Coordinate {
     }
 }
 
+fn flatten_circuits(circuits: Vec<Vec<Pair>>) -> impl Iterator<Item = BTreeSet<Coordinate>> {
+    circuits.into_iter().map(|circuit| {
+        circuit.iter().fold(BTreeSet::new(), |acc, pair| {
+            let (&c1, &c2) = pair.into();
+            acc.into_iter().chain([c1, c2]).collect()
+        })
+    })
+}
+
+fn parse(str: &str) -> impl Iterator<Item = Coordinate> + Clone {
+    str.lines().map(Into::into)
+}
+
 mod part1 {
     use crate::{Coordinate, Pair};
     use itertools::Itertools;
     use std::collections::BTreeSet;
 
-    pub fn parse(str: &str) -> impl Iterator<Item = Coordinate> {
-        str.lines().map(Into::into)
-    }
-
     /// Sorted closest to furthest coordinate pairs
-    pub fn sorted_coordinate_pairs(
+    pub(crate) fn sorted_coordinate_pairs(
         coordinates: impl Iterator<Item = Coordinate>,
     ) -> impl Iterator<Item = Pair> {
         coordinates
@@ -104,10 +113,10 @@ mod part1 {
             .unique() // Remove pair inversions
     }
 
-    pub fn connect_n_closest_coordinates(
+    fn connect_n_closest_coordinates(
         coordinates: impl Iterator<Item = Coordinate>,
         n: usize,
-    ) -> Vec<BTreeSet<Coordinate>> {
+    ) -> impl Iterator<Item = BTreeSet<Coordinate>> {
         let mut pairs = sorted_coordinate_pairs(coordinates);
         let mut circuits: Vec<Vec<Pair>> = vec![];
 
@@ -140,28 +149,91 @@ mod part1 {
             };
         }
 
-        circuits
-            .into_iter()
-            .chain(pairs.map(|pair| vec![pair])) // chain the rest of the coordinates
-            .map(|circuit| {
-                circuit.iter().fold(BTreeSet::new(), |acc, pair| {
-                    let (&c1, &c2) = pair.into();
-                    acc.into_iter().chain([c1, c2]).collect()
-                })
-            })
-            .collect()
+        crate::flatten_circuits(circuits)
     }
 
     pub fn multiply_three_largest_circuits(input: &str) -> usize {
-        let coordinates = parse(input);
+        let coordinates = crate::parse(input);
         let circuits = connect_n_closest_coordinates(coordinates, 1000);
 
         circuits
-            .iter()
-            .map(BTreeSet::len)
+            .map(|circuit| circuit.len())
             .sorted_by(|len1, len2| Ord::cmp(len2, len1)) // descending order
             .take(3)
             .product()
+    }
+}
+
+mod part2 {
+    use crate::{Coordinate, Pair};
+
+    fn get_last_pair_to_connect_all_coordinates(
+        coordinates: impl Iterator<Item = Coordinate> + Clone,
+    ) -> Pair {
+        let pairs = crate::part1::sorted_coordinate_pairs(coordinates.clone());
+        let mut circuits: Vec<Vec<Pair>> = vec![];
+        let mut latest_pair = None;
+
+        for pair in pairs {
+            // TODO: this might not actually be the last pair
+            if has_connected_all_coordinates(coordinates.clone(), &circuits) {
+                return latest_pair.expect("`pairs` is non-empty");
+            }
+
+            let mut matching_circuits = circuits
+                .clone()
+                .into_iter()
+                .enumerate()
+                .filter(|(_, circuit)| circuit.iter().any(|p| pair.connects_with(p)));
+
+            let Some(connecting_circuit1) = matching_circuits.next() else {
+                // Doesn't connect with any of the circuits
+                circuits.push(vec![pair.clone()]);
+                latest_pair = Some(pair);
+                continue;
+            };
+
+            match matching_circuits.next() {
+                None => {
+                    // Connects with one of the circuits
+                    circuits[connecting_circuit1.0].push(pair.clone());
+                    latest_pair = Some(pair);
+                    continue;
+                }
+                Some(connecting_circuit2) => {
+                    // Connects two different circuits
+                    let connecting_circuit2 = circuits.swap_remove(connecting_circuit2.0);
+                    let new_circuit = connecting_circuit1.1.into_iter().chain(connecting_circuit2);
+
+                    circuits[connecting_circuit1.0] = new_circuit.collect();
+                    latest_pair = Some(pair);
+                }
+            };
+        }
+
+        unreachable!()
+    }
+
+    fn has_connected_all_coordinates(
+        coordinates: impl Iterator<Item = Coordinate> + Clone,
+        circuits: &[Vec<Pair>],
+    ) -> bool {
+        let Some(circuits) = crate::flatten_circuits(circuits.to_vec()).next() else {
+            return false;
+        };
+
+        let length = circuits.len();
+        println!("Connected circuits: {length}");
+
+        coordinates.count() == length
+    }
+
+    pub fn last_pair_x_coordinate_product(input: &str) -> u128 {
+        let coordinates = crate::parse(input);
+        let pair = get_last_pair_to_connect_all_coordinates(coordinates);
+        let (c1, c2) = (&pair).into();
+
+        c1.0 as u128 * c2.0 as u128
     }
 }
 
@@ -169,6 +241,7 @@ fn main() {
     let input = include_str!("../../input/day8");
 
     println!("Part 1: {}", part1::multiply_three_largest_circuits(input));
+    println!("Part 2: {}", part2::last_pair_x_coordinate_product(input));
 }
 
 #[cfg(test)]
@@ -225,7 +298,7 @@ mod tests {
         ]
         .map(|(c1, c2)| Pair::from((c1.into(), c2.into())));
 
-        let coordinates = part1::parse(INPUT);
+        let coordinates = crate::parse(INPUT);
         let pairs = part1::sorted_coordinate_pairs(coordinates).take(4);
 
         assert!(itertools::equal(pairs, expected_pairs));
